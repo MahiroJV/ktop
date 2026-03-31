@@ -17,7 +17,7 @@ warn()    { printf "  ${YELLOW}${BOLD}!${RESET}  %s\n" "$*"; }
 error()   { printf "  ${RED}${BOLD}✗${RESET}  %s\n" "$*" >&2; exit 1; }
 
 BIN_DIR="${HOME}/.local/bin"
-BIN_PATH="${BIN_DIR}/ktop"
+BIN_PATH="${BIN_DIR}/ktop-r"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo ""
@@ -35,13 +35,13 @@ info "Building ktop (release)..."
 cd "$SCRIPT_DIR"
 cargo build --release 2>&1 | grep -E "Compiling|Finished|error" || true
 
-[[ -f "${SCRIPT_DIR}/target/release/ktop" ]] || error "build failed — run 'cargo build --release' to see full output"
+[[ -f "${SCRIPT_DIR}/target/release/ktop-r" ]] || error "build failed — run 'cargo build --release' to see full output"
 success "Build complete"
 
 # ── Install binary ────────────────────────────────────────────────────────────
 info "Installing to ${BIN_PATH}..."
 mkdir -p "$BIN_DIR"
-cp "${SCRIPT_DIR}/target/release/ktop" "$BIN_PATH"
+cp "${SCRIPT_DIR}/target/release/ktop-r" "$BIN_PATH"
 chmod +x "$BIN_PATH"
 success "Binary installed"
 
@@ -61,5 +61,5 @@ fi
 echo "  ─────────────────────────────────────────"
 success "${BOLD}ktop installed!${RESET}"
 echo ""
-printf "  Run it with: ${CYAN}${BOLD}ktop${RESET}\n"
+printf "  Run it with: ${CYAN}${BOLD}ktop-r${RESET}\n"
 echo ""

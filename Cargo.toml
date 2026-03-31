@@ -7,3 +7,6 @@ edition = "2024"
 sysinfo = "0.29"
 crossterm = "0.27"
 tui = "0.19"
+[[bin]]
+name = "ktop-r"
+path = "src/main.rs"
