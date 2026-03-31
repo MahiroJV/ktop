@@ -4,6 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-sysinfo = "0.30"
+sysinfo = "0.29"
 crossterm = "0.27"
 tui = "0.19"
