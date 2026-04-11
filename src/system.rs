@@ -144,13 +144,13 @@ pub fn collect_disk_dirs() -> Vec<DirInfo> {
 // Scan top-level directories and return sorted by size (biggest first)
 fn top_dirs(_disk_total_gb: f64) -> Vec<DirInfo> {
     use std::process::Command;
-    use std::fs;
+
 
     // use `du` for fast recursive size — much faster than walking ourselves
     // -x = stay on same filesystem, -d1 = one level deep, --block-size=1M
     let output =
         Command::new("du")
-        .args(&["-x", "-d", "1", "--block-size=1M", "/"])
+        .args(["-x", "-d", "1", "--block-size=1M", "/"])
         .output();
 
     let Ok(out) = output else { return vec![]; };

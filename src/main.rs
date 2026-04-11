@@ -6,7 +6,7 @@ use std::{
     thread,
     time::Duration,
 };
-use system::{Collector, DirInfo, SortBy};
+use system::{Collector, DirInfo};
 use ui::AppState;
 
 fn main() -> std::io::Result<()> {
@@ -15,7 +15,7 @@ fn main() -> std::io::Result<()> {
     let mut stats = collector.collect_fast();
     let mut state = AppState::default();
     let mut tick = 0u32;
-    let mut slow_tick = 0u32;
+    //let mut slow_tick = 0u32;
 
     // shared buffer for disk dirs — updated by background thread
     // main thread only reads, bg thread writes
@@ -36,6 +36,7 @@ fn main() -> std::io::Result<()> {
 
     loop {
         // pull latest disk dirs from background thread (non-blocking try_lock)
+        #[allow(clippy::collapsible_if)]
         if let Ok(dirs) = dir_buf.try_lock() {
             if !dirs.is_empty() {
                 stats.disk_dirs = dirs.clone();
@@ -59,7 +60,7 @@ fn main() -> std::io::Result<()> {
 
         thread::sleep(Duration::from_millis(50));
         tick += 1;
-        slow_tick += 1;
+        //slow_tick += 1;
 
         // fast refresh every 500ms (10 × 50ms)
         if tick >= 10 {
