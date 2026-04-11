@@ -166,6 +166,7 @@ fn top_dirs(_disk_total_gb: f64) -> Vec<DirInfo> {
         let text = String::from_utf8_lossy(&out.stdout);
         if let Some(line) = text.lines().next() {
             let mut parts = line.splitn(2, '\t');
+            #[allow(clippy::collapsible_if)]
             if let (Some(size_str), Some(_path)) = (parts.next(), parts.next()) {
                 if let Ok(size_mb) = size_str.trim().parse::<u64>() {
                     if size_mb > 0 {
