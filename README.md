@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/logo.png" height="128" alt="ktop logo">
+  <img src="assets/logo.png" height="256" alt="ktop logo">
   
   <h1 align="center" style="border:0;">ktop 🔥</h1>
   
