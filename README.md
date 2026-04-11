@@ -7,12 +7,15 @@
   <p align="center">
     <img src="https://github.com/MahiroJV/kctop/actions/workflows/rust.yml/badge.svg" alt="CI">
     <a href="https://github.com/MahiroJV/kctop/stargazers">
-      <img src="https://img.shields.io/github/stars/MahiroJV/kctop">
+      <img src="https://img.shields.io/github/stars/MahiroJV/kctop?style=flat&label=%20Stars&color=yellow" alt="Stars">
     </a>
     <img src="https://img.shields.io/badge/Rust-orange?style=flat&logo=rust&logoColor=white" alt="Rust">
     <img src="https://img.shields.io/badge/Linux-E11837?style=flat&logo=linux&logoColor=white" alt="Linux">
     <img src="https://img.shields.io/github/repo-size/MahiroJV/kctop?style=flat&color=blue" alt="size">
     <img src="https://img.shields.io/badge/Status-Active-brightgreen?style=flat" alt="Status">
+    <a href="https://claude.ai">
+  <img src="https://img.shields.io/badge/Built%20with-Claude-CC785C?style=flat&logo=anthropic&logoColor=white" alt="Built with Claude">
+</a>
   </p>
   <br>
 </div>
