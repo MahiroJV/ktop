@@ -5,29 +5,55 @@ use tui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Span, Spans},
-    widgets::{Block, Borders, Cell, Gauge, Paragraph, Row, Table},
+    widgets::{Block, Borders, Cell, BorderType, Gauge, Paragraph, Row, Table},
     Frame, Terminal,
 };
+
 use crossterm::{
-    event::{self, Event, KeyCode},
+    event::{self, Event, KeyCode, MouseButton, MouseEvent, MouseEventKind, EnableMouseCapture, DisableMouseCapture},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use std::{io, time::Duration};
-use crate::system::SystemStats;
+use crate::system::{SystemStats, SortBy};
+
+//// ── Color palette ─────────────────────────────────────────────────────────────
+const C_ACCENT: Color = Color::Cyan;
+const C_PURPLE: Color = Color::Magenta;
+const C_GREEN: Color = Color::Green;
+const C_YELLOW: Color = Color::Yellow;
+const C_DIM: Color = Color::DarkGray;
+const C_WHITE: Color = Color::White;
+const C_RED: Color = Color::Red;
+
+// ── App state (sort + mouse selection) ───────────────────────────────────────
+#[derive(Default)]
+pub struct AppState {
+    pub sort_by: SortBy,
+    pub selected_row: Option<usize>,
+    pub proc_area: Option<Rect>,
+    pub proc_header_y: Option<u16>,
+    pub sort_buttons: Vec<(Rect, SortBy)>,
+}
+
+pub enum Action{
+    Quit,
+    Refresh,
+    None,
+}
 
 // ── Terminal lifecycle ────────────────────────────────────────────────────────
 
 pub fn setup() -> io::Result<Terminal<CrosstermBackend<io::Stdout>>> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen)?;
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
     Terminal::new(CrosstermBackend::new(stdout))
 }
 
 pub fn teardown(term: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::Result<()> {
     disable_raw_mode()?;
-    execute!(term.backend_mut(), LeaveAlternateScreen)?;
+    execute!(term.backend_mut(), LeaveAlternateScreen, DisableMouseCapture)?;
     term.show_cursor()
 }
 
@@ -41,129 +67,228 @@ pub fn should_quit() -> bool {
     false
 }
 
+// ── Event polling ─────────────────────────────────────────────────────────────
+
+pub fn poll_event(state: &mut AppState) -> Action {
+    if !event::poll(Duration::from_millis(0)).unwrap_or(false) {
+        return Action::None;
+    }
+    match event::read() {
+        // ── Keyboard ──────────────────────────────────────────────────────────
+        Ok(Event::Key(k)) => match k.code {
+            KeyCode::Char('q') | KeyCode::Char('Q') => Action::Quit,
+            KeyCode::Char('r') | KeyCode::Char('R') => Action::Refresh,
+            // sort shortcuts
+            KeyCode::Char('c') => { state.sort_by = SortBy::CpuDesc;  Action::Refresh }
+            KeyCode::Char('C') => { state.sort_by = SortBy::CpuAsc;   Action::Refresh }
+            KeyCode::Char('m') => { state.sort_by = SortBy::MemDesc;  Action::Refresh }
+            KeyCode::Char('M') => { state.sort_by = SortBy::MemAsc;   Action::Refresh }
+            KeyCode::Char('p') => { state.sort_by = SortBy::Pid;      Action::Refresh }
+            KeyCode::Char('n') => { state.sort_by = SortBy::Name;     Action::Refresh }
+            _ => Action::None,
+        },
+
+        // ── Mouse ─────────────────────────────────────────────────────────────
+        Ok(Event::Mouse(m)) => handle_mouse(state, m),
+
+        _ => Action::None,
+    }
+}
+
+fn handle_mouse(state: &mut AppState, m: MouseEvent) -> Action {
+    match m.kind {
+        // left click — check sort buttons + process rows
+        MouseEventKind::Down(MouseButton::Left) => {
+            let (col, row) = (m.column, m.row);
+
+            // check sort button hits
+            for (rect, sort) in &state.sort_buttons {
+                if in_rect(col, row, *rect) {
+                    state.sort_by = *sort;
+                    return Action::Refresh;
+                }
+            }
+
+            // check process row click (select row)
+            if let (Some(area), Some(header_y)) = (state.proc_area, state.proc_header_y) {
+                if in_rect(col, row, area) && row > header_y {
+                    let idx = (row - header_y - 1) as usize;
+                    state.selected_row = Some(idx);
+                }
+            }
+            Action::None
+        }
+
+        // scroll wheel in process table — move selection
+        MouseEventKind::ScrollDown => {
+            if let Some(ref mut sel) = state.selected_row {
+                *sel = sel.saturating_add(1).min(9);
+            }
+            Action::None
+        }
+        MouseEventKind::ScrollUp => {
+            if let Some(ref mut sel) = state.selected_row {
+                *sel = sel.saturating_sub(1);
+            }
+            Action::None
+        }
+
+        // hover — highlight process row
+        MouseEventKind::Moved => {
+            if let (Some(area), Some(header_y)) = (state.proc_area, state.proc_header_y) {
+                let (col, row) = (m.column, m.row);
+                if in_rect(col, row, area) && row > header_y {
+                    state.selected_row = Some((row - header_y - 1) as usize);
+                } else {
+                    state.selected_row = None;
+                }
+            }
+            Action::None
+        }
+
+        _ => Action::None,
+    }
+}
+
+fn in_rect(col: u16, row: u16, r: Rect) -> bool {
+    col >= r.x && col < r.x + r.width && row >= r.y && row < r.y + r.height
+}
+
 // ── Root draw ─────────────────────────────────────────────────────────────────
 
-pub fn draw(f: &mut Frame<CrosstermBackend<io::Stdout>>, stats: &SystemStats) {
+pub fn draw(f: &mut Frame<CrosstermBackend<io::Stdout>>, stats: &SystemStats, state: &mut AppState) {
     let area = f.size();
 
-    // guard: if terminal is too small, just show a message and bail
-    // prevents Layout::split from panicking with negative constraint values
     if area.width < 80 || area.height < 24 {
         let msg = Paragraph::new(Spans::from(vec![
-            Span::styled(" ktop ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(" ktop-r ", Style::default().fg(C_ACCENT).add_modifier(Modifier::BOLD)),
             Span::styled(
-                format!("— terminal too small ({}x{}, need 80x24)", area.width, area.height),
-                Style::default().fg(Color::Yellow),
+                format!("terminal too small ({}x{}, need 80x24)", area.width, area.height),
+                Style::default().fg(C_YELLOW),
             ),
         ]));
         f.render_widget(msg, area);
         return;
     }
 
-    // vertical: 1 header | body | 1 footer
+    // clear sort buttons each frame (rebuilt below)
+    state.sort_buttons.clear();
+
+    // root: header(3) | grid | footer(1)
     let root = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(2),
+            Constraint::Length(3),
             Constraint::Min(0),
             Constraint::Length(1),
         ])
         .split(area);
 
-    draw_header(f, root[0]);
+    draw_header(f, root[0], stats);
 
-    // body: left 50% | right 50%
-    let body = Layout::default()
-        .direction(Direction::Horizontal)
+    // 4-quadrant grid
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(root[1]);
 
-    draw_left(f, body[0], stats);
-    draw_right(f, body[1], stats);
+    // top: CPU 60% | Memory 40%
+    let top = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
+        .split(rows[0]);
 
-    draw_footer(f, root[2]);
+    // bottom: Processes 60% | Disk+Net 40%
+    let bot = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
+        .split(rows[1]);
+
+    let bot_right = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(bot[1]);
+
+    draw_cpu(f, top[0], stats);
+    draw_memory(f, top[1], stats);
+    draw_processes(f, bot[0], stats, state);
+    draw_disk(f, bot_right[0], stats);
+    draw_network(f, bot_right[1], stats);
+
+    draw_footer(f, root[2], state);
 }
 
 // ── Header ────────────────────────────────────────────────────────────────────
 
-fn draw_header(f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect) {
+fn draw_header(f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, s: &SystemStats) {
     let now = wall_time();
-    let text = Spans::from(vec![
-        Span::styled(" ktop ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-        Span::styled("— koktail's system monitor", Style::default().fg(Color::DarkGray)),
-        Span::styled(format!("  {}", now), Style::default().fg(Color::DarkGray)),
-    ]);
-    f.render_widget(Paragraph::new(text), area);
-}
+    let sep = "─".repeat(area.width as usize);
 
-// ── Left column: CPU → Disk → Processes ──────────────────────────────────────
+    f.render_widget(
+        Paragraph::new(Spans::from(Span::styled(&sep, Style::default().fg(C_PURPLE)))),
+        Rect { height: 1, ..area },
+    );
 
-fn draw_left(f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, s: &SystemStats) {
-    let core_rows = (s.cpu_cores.len().min(8) + 2) as u16; // +2 for border+freq
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(core_rows + 4),  // CPU box
-            Constraint::Length(5),              // Disk box
-            Constraint::Min(0),                 // Processes
-        ])
-        .split(area);
+    let header_area = Rect { y: area.y + 1, height: 1, ..area };
+    f.render_widget(
+        Paragraph::new(Spans::from(vec![
+            Span::styled("  ◈ ", Style::default().fg(C_PURPLE)),
+            Span::styled("ktop-r", Style::default().fg(C_ACCENT).add_modifier(Modifier::BOLD)),
+            Span::styled("  koktail's system monitor", Style::default().fg(C_DIM)),
+            Span::styled(
+                format!("  ·  cpu {:.0}%  ·  mem {} MB  ·  {}  ", s.cpu_total, s.mem_used, now),
+                Style::default().fg(C_DIM),
+            ),
+        ])),
+        header_area,
+    );
 
-    draw_cpu(f, chunks[0], s);
-    draw_disk(f, chunks[1], s);
-    draw_processes(f, chunks[2], s);
-}
-
-// ── Right column: Memory → Network ───────────────────────────────────────────
-
-fn draw_right(f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, s: &SystemStats) {
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(8),   // Memory
-            Constraint::Length(7),   // Network
-            Constraint::Min(0),
-        ])
-        .split(area);
-
-    draw_memory(f, chunks[0], s);
-    draw_network(f, chunks[1], s);
+    f.render_widget(
+        Paragraph::new(Spans::from(Span::styled(&sep, Style::default().fg(C_PURPLE)))),
+        Rect { y: area.y + 2, height: 1, ..area },
+    );
 }
 
 // ── CPU ───────────────────────────────────────────────────────────────────────
 
 fn draw_cpu(f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, s: &SystemStats) {
-    let title = format!(" CPU  {} ", clip(&s.cpu_name, 34));
-    let block = styled_block(&title);
+    let title = format!("◈ CPU  ⟨{}⟩", clip(&s.cpu_name, 28));
+    let block = future_block(&title, C_ACCENT);
     let inner = block.inner(area);
     f.render_widget(block, area);
 
-    let core_count = s.cpu_cores.len().min(8);
-    // one row per core + 1 overall + 1 freq line
-    let mut constraints: Vec<Constraint> = vec![Constraint::Length(1)]; // overall
+    let core_count = s.cpu_cores.len().min(6);
+    let mut constraints = vec![Constraint::Length(1), Constraint::Length(1)];
     for _ in 0..core_count { constraints.push(Constraint::Length(1)); }
-    constraints.push(Constraint::Length(1)); // freq
+    constraints.push(Constraint::Min(0));
+
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints(constraints)
         .split(inner);
 
-    f.render_widget(gauge(s.cpu_total as u16, "Total"), rows[0]);
-    for (i, &usage) in s.cpu_cores.iter().take(8).enumerate() {
-        f.render_widget(gauge(usage as u16, &format!("Core{}", i)), rows[i + 1]);
+    f.render_widget(fancy_gauge(s.cpu_total as u16, "  TOTAL", C_ACCENT), rows[0]);
+    f.render_widget(
+        Paragraph::new(Spans::from(Span::styled(" ┄ cores ┄", Style::default().fg(C_DIM)))),
+        rows[1],
+    );
+    for (i, &usage) in s.cpu_cores.iter().take(6).enumerate() {
+        let color = if i % 2 == 0 { C_PURPLE } else { C_ACCENT };
+        f.render_widget(fancy_gauge(usage as u16, &format!("  C{:<2}", i), color), rows[i + 2]);
     }
-
-    let freq = Spans::from(vec![
-        Span::styled(" Freq: ", Style::default().fg(Color::DarkGray)),
-        Span::styled(format!("{} MHz", s.cpu_freq), Style::default().fg(Color::Cyan)),
-    ]);
-    f.render_widget(Paragraph::new(freq), rows[core_count + 1]);
+    f.render_widget(
+        Paragraph::new(Spans::from(vec![
+            Span::styled("  ◇ freq ", Style::default().fg(C_DIM)),
+            Span::styled(format!("{} MHz", s.cpu_freq), Style::default().fg(C_ACCENT).add_modifier(Modifier::BOLD)),
+        ])),
+        rows[core_count + 2],
+    );
 }
 
 // ── Memory ────────────────────────────────────────────────────────────────────
 
 fn draw_memory(f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, s: &SystemStats) {
-    let block = styled_block(" Memory ");
+    let block = future_block("◈ MEMORY", C_PURPLE);
     let inner = block.inner(area);
     f.render_widget(block, area);
 
@@ -174,20 +299,25 @@ fn draw_memory(f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, s: &Syst
             Constraint::Length(1),
             Constraint::Length(1),
             Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Min(0),
         ])
         .split(inner);
 
-    f.render_widget(gauge(s.mem_percent as u16, "RAM "), rows[0]);
-    f.render_widget(info_line("Used", &format!("{} MB / {} MB", s.mem_used, s.mem_total)), rows[1]);
-    f.render_widget(gauge(s.swap_percent as u16, "Swap"), rows[2]);
-    f.render_widget(info_line("Used", &format!("{} MB / {} MB", s.swap_used, s.swap_total)), rows[3]);
+    f.render_widget(fancy_gauge(s.mem_percent as u16, "RAM ", C_PURPLE), rows[0]);
+    f.render_widget(stat_line("Used", &format!("{} MB / {} MB", s.mem_used, s.mem_total), C_PURPLE), rows[1]);
+    f.render_widget(
+        Paragraph::new(Spans::from(Span::styled(" ┄ swap ┄", Style::default().fg(C_DIM)))),
+        rows[2],
+    );
+    f.render_widget(fancy_gauge(s.swap_percent as u16, "  SWAP", C_ACCENT), rows[3]);
+    f.render_widget(stat_line("  ◇", &format!("{} MB / {} MB", s.swap_used, s.swap_total), C_ACCENT), rows[4]);
 }
-
 // ── Disk ──────────────────────────────────────────────────────────────────────
 
 fn draw_disk(f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, s: &SystemStats) {
     let title = format!(" Disk  [{}] ", clip(&s.disk_name, 18));
-    let block = styled_block(&title);
+    let block = future_block(&title, C_GREEN);
     let inner = block.inner(area);
     f.render_widget(block, area);
 
@@ -196,9 +326,9 @@ fn draw_disk(f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, s: &System
         .constraints([Constraint::Length(1), Constraint::Length(1)])
         .split(inner);
 
-    f.render_widget(gauge(s.disk_percent as u16, "/   "), rows[0]);
+    f.render_widget(fancy_gauge(s.disk_percent as u16, "  /   ", C_GREEN), rows[0]);
     f.render_widget(
-        info_line("Used", &format!("{:.1} GB / {:.1} GB", s.disk_used_gb, s.disk_total_gb)),
+        stat_line("  ◇", &format!("{:.1} GB / {:.1} GB", s.disk_used_gb, s.disk_total_gb), C_GREEN),
         rows[1],
     );
 }
@@ -207,7 +337,7 @@ fn draw_disk(f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, s: &System
 
 fn draw_network(f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, s: &SystemStats) {
     let title = format!(" Network  [{}] ", clip(&s.net_iface, 12));
-    let block = styled_block(&title);
+    let block = future_block(&title, C_YELLOW);
     let inner = block.inner(area);
     f.render_widget(block, area);
 
@@ -216,99 +346,225 @@ fn draw_network(f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, s: &Sys
         .constraints([Constraint::Length(1), Constraint::Length(1), Constraint::Length(1)])
         .split(inner);
 
-    let speed = Spans::from(vec![
-        Span::styled(" ↓ ", Style::default().fg(Color::Green)),
-        Span::styled(format!("{} KB/s", s.net_rx_kbs), Style::default().fg(Color::White)),
-        Span::styled("   ↑ ", Style::default().fg(Color::Yellow)),
-        Span::styled(format!("{} KB/s", s.net_tx_kbs), Style::default().fg(Color::White)),
-    ]);
-    f.render_widget(Paragraph::new(speed), rows[0]);
-
-    let totals = Spans::from(vec![
-        Span::styled(" Total ↓ ", Style::default().fg(Color::DarkGray)),
-        Span::styled(format!("{} MB", s.net_rx_total_mb), Style::default().fg(Color::White)),
-        Span::styled("   ↑ ", Style::default().fg(Color::DarkGray)),
-        Span::styled(format!("{} MB", s.net_tx_total_mb), Style::default().fg(Color::White)),
-    ]);
-    f.render_widget(Paragraph::new(totals), rows[1]);
+    f.render_widget(
+        Paragraph::new(Spans::from(vec![
+            Span::styled("  ▼ ", Style::default().fg(C_GREEN).add_modifier(Modifier::BOLD)),
+            Span::styled(format!("{:>6} KB/s", s.net_rx_kbs), Style::default().fg(C_WHITE)),
+            Span::styled("  ▲ ", Style::default().fg(C_YELLOW).add_modifier(Modifier::BOLD)),
+            Span::styled(format!("{:>6} KB/s", s.net_tx_kbs), Style::default().fg(C_WHITE)),
+        ])),
+        rows[0],
+    );
+    f.render_widget(
+        Paragraph::new(Spans::from(vec![
+            Span::styled("  ◇ ↓ ", Style::default().fg(C_DIM)),
+            Span::styled(format!("{} MB", s.net_rx_total_mb), Style::default().fg(C_WHITE)),
+            Span::styled("  ↑ ", Style::default().fg(C_DIM)),
+            Span::styled(format!("{} MB", s.net_tx_total_mb), Style::default().fg(C_WHITE)),
+        ])),
+        rows[1],
+    );
 }
 
 // ── Process table ─────────────────────────────────────────────────────────────
 
-fn draw_processes(f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, s: &SystemStats) {
+fn draw_processes(
+    f: &mut Frame<CrosstermBackend<io::Stdout>>,
+    area: Rect,
+    s: &SystemStats,
+    state: &mut AppState,
+) {
+    // save area for mouse hit-testing
+    state.proc_area = Some(area);
+
+    // ── sort bar above the table ───────────────────────────────────────────────
+    // layout: sort_bar(1) | table(rest)
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(1), Constraint::Min(0)])
+        .split(area);
+
+    draw_sort_bar(f, chunks[0], state);
+
+    // ── process table ──────────────────────────────────────────────────────────
+    let sort_label = sort_label(state.sort_by);
+    let title = format!("◈ PROCESSES  ⟨sort: {}⟩", sort_label);
+    let block = future_block(&title, C_ACCENT);
+    let inner = block.inner(chunks[1]);
+    f.render_widget(block, chunks[1]);
+
+    // header row y for mouse hit-testing
+    state.proc_header_y = Some(inner.y);
+
     let header = Row::new(vec![
-        Cell::from("PID")   .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-        Cell::from("Name")  .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-        Cell::from("CPU%")  .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-        Cell::from("MEM MB").style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+        Cell::from(" PID")  .style(Style::default().fg(C_ACCENT).add_modifier(Modifier::BOLD)),
+        Cell::from("NAME")  .style(Style::default().fg(C_ACCENT).add_modifier(Modifier::BOLD)),
+        Cell::from(sort_col_label("CPU%",  state.sort_by, SortBy::CpuDesc, SortBy::CpuAsc))
+            .style(Style::default().fg(C_YELLOW).add_modifier(Modifier::BOLD)),
+        Cell::from(sort_col_label("MEM",   state.sort_by, SortBy::MemDesc, SortBy::MemAsc))
+            .style(Style::default().fg(C_YELLOW).add_modifier(Modifier::BOLD)),
     ]).height(1).bottom_margin(0);
 
-    let rows: Vec<Row> = s.processes.iter().map(|p| {
-        let cpu_color = if p.cpu > 50.0 { Color::Red }
-        else if p.cpu > 15.0 { Color::Yellow }
-        else { Color::Green };
+    let rows: Vec<Row> = s.processes.iter().enumerate().map(|(i, p)| {
+        let is_selected = state.selected_row == Some(i);
+        let cpu_color = if p.cpu > 50.0 { C_RED }
+        else if p.cpu > 15.0 { C_YELLOW }
+        else { C_GREEN };
+
+        let base_style = if is_selected {
+            Style::default().fg(C_WHITE).bg(Color::Rgb(30, 30, 60)).add_modifier(Modifier::BOLD)
+        } else if i == 0 {
+            Style::default().fg(C_WHITE).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(C_DIM)
+        };
+
         Row::new(vec![
-            Cell::from(p.pid.to_string()),
-            Cell::from(clip(&p.name, 22)),
-            Cell::from(format!("{:.1}%", p.cpu)).style(Style::default().fg(cpu_color)),
-            Cell::from(format!("{}", p.mem_mb)),
+            Cell::from(format!(" {}", p.pid)).style(base_style),
+            Cell::from(clip(&p.name, 20)).style(base_style),
+            Cell::from(format!("{:.1}%", p.cpu))
+                .style(Style::default().fg(cpu_color).add_modifier(if is_selected { Modifier::BOLD } else { Modifier::empty() })),
+            Cell::from(format!("{} MB", p.mem_mb)).style(base_style),
         ])
     }).collect();
 
     let table = Table::new(rows)
         .header(header)
-        .block(styled_block(" Processes "))
         .widths(&[
             Constraint::Length(7),
-            Constraint::Min(22),
+            Constraint::Min(18),
             Constraint::Length(7),
-            Constraint::Length(7),
+            Constraint::Length(8),
         ]);
 
-    f.render_widget(table, area);
+    f.render_widget(table, inner);
 }
 
+// ── Sort button bar ───────────────────────────────────────────────────────────
+
+fn draw_sort_bar(f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, state: &mut AppState) {
+    let buttons: &[(&str, SortBy)] = &[
+        ("CPU▼", SortBy::CpuDesc),
+        ("CPU▲", SortBy::CpuAsc),
+        ("MEM▼", SortBy::MemDesc),
+        ("MEM▲", SortBy::MemAsc),
+        ("PID",  SortBy::Pid),
+        ("NAME", SortBy::Name),
+    ];
+
+    let mut x = area.x + 1;
+    let y = area.y;
+
+    for (label, sort) in buttons {
+        let w = label.len() as u16 + 2;
+        let btn_rect = Rect { x, y, width: w, height: 1 };
+
+        let active = state.sort_by == *sort;
+        let style = if active {
+            Style::default().fg(Color::Black).bg(C_ACCENT).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(C_DIM)
+        };
+
+        let text = format!("[{}]", label);
+        f.render_widget(Paragraph::new(Spans::from(Span::styled(text, style))), btn_rect);
+
+        // register button for mouse hit-testing
+        state.sort_buttons.push((btn_rect, *sort));
+
+        x += w + 1;
+        if x >= area.x + area.width { break; }
+    }
+}
 // ── Footer ────────────────────────────────────────────────────────────────────
 
-fn draw_footer(f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect) {
-    let text = Spans::from(vec![
-        Span::styled(" q", Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
-        Span::styled(":quit", Style::default().fg(Color::DarkGray)),
-    ]);
-    f.render_widget(Paragraph::new(text), area);
+fn draw_footer(f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, state: &AppState) {
+    let sort = sort_label(state.sort_by);
+    f.render_widget(
+        Paragraph::new(Spans::from(vec![
+            Span::styled(" ◈ ", Style::default().fg(C_PURPLE)),
+            Span::styled("q", Style::default().fg(C_ACCENT).add_modifier(Modifier::BOLD)),
+            Span::styled(" quit  ", Style::default().fg(C_DIM)),
+            Span::styled("c", Style::default().fg(C_ACCENT).add_modifier(Modifier::BOLD)),
+            Span::styled("/", Style::default().fg(C_DIM)),
+            Span::styled("C", Style::default().fg(C_ACCENT).add_modifier(Modifier::BOLD)),
+            Span::styled(" cpu  ", Style::default().fg(C_DIM)),
+            Span::styled("m", Style::default().fg(C_ACCENT).add_modifier(Modifier::BOLD)),
+            Span::styled("/", Style::default().fg(C_DIM)),
+            Span::styled("M", Style::default().fg(C_ACCENT).add_modifier(Modifier::BOLD)),
+            Span::styled(" mem  ", Style::default().fg(C_DIM)),
+            Span::styled("p", Style::default().fg(C_ACCENT).add_modifier(Modifier::BOLD)),
+            Span::styled(" pid  ", Style::default().fg(C_DIM)),
+            Span::styled("n", Style::default().fg(C_ACCENT).add_modifier(Modifier::BOLD)),
+            Span::styled(" name  ", Style::default().fg(C_DIM)),
+            Span::styled(format!("· sort: {}", sort), Style::default().fg(C_DIM)),
+        ])),
+        area,
+    );
 }
 
 // ── Shared widget helpers ─────────────────────────────────────────────────────
 
 // Colored gauge — green < 60, yellow < 85, red >= 85
-fn gauge(percent: u16, label: &str) -> Gauge {
+fn fancy_gauge(percent: u16, label: &str, color: Color) -> Gauge {
     let pct = percent.min(100);
-    let color = if pct >= 85 { Color::Red }
-    else if pct >= 60 { Color::Yellow }
-    else { Color::Green };
+    let bar_color = if pct >= 85 { C_RED }
+    else if pct >= 60 { C_YELLOW }
+    else { color };
 
     Gauge::default()
         .block(Block::default())
-        .gauge_style(Style::default().fg(color).bg(Color::DarkGray))
+        .gauge_style(Style::default().fg(bar_color).bg(Color::DarkGray))
         .percent(pct)
-        .label(format!("{} {:3}%", label, pct))
+        .label(Span::styled(
+            format!("{} {:3}%", label, pct),
+            Style::default().fg(C_WHITE).add_modifier(Modifier::BOLD),
+        ))
 }
 
 // Box with cyan border + bold title
-fn styled_block(title: &str) -> Block {
+fn future_block(title: &str, color: Color) -> Block {
     Block::default()
-        .title(Span::styled(title, Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)))
+        .title(Spans::from(vec![
+            Span::styled("╸", Style::default().fg(color)),
+            Span::styled(format!(" {} ", title), Style::default().fg(color).add_modifier(Modifier::BOLD)),
+            Span::styled("╺", Style::default().fg(color)),
+        ]))
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Cyan))
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(color))
+}
+
+fn stat_line<'a>(prefix: &'a str, value: &'a str, color: Color) -> Paragraph<'a> {
+    Paragraph::new(Spans::from(vec![
+        Span::styled(prefix.to_string(), Style::default().fg(color)),
+        Span::styled(" ", Style::default()),
+        Span::styled(value.to_string(), Style::default().fg(C_WHITE)),
+    ]))
+}
+fn sort_col_label(base: &str, current: SortBy, desc: SortBy, asc: SortBy) -> String {
+    if current == desc      { format!("{} ▼", base) }
+    else if current == asc  { format!("{} ▲", base) }
+    else                    { base.to_string() }
+}
+fn sort_label(s: SortBy) -> &'static str {
+    match s {
+        SortBy::CpuDesc => "cpu ▼",
+        SortBy::CpuAsc  => "cpu ▲",
+        SortBy::MemDesc => "mem ▼",
+        SortBy::MemAsc  => "mem ▲",
+        SortBy::Pid     => "pid",
+        SortBy::Name    => "name",
+    }
 }
 
 // "  Label: value" dim/white info line
-fn info_line<'a>(label: &'a str, value: &'a str) -> Paragraph<'a> {
-    Paragraph::new(Spans::from(vec![
-        Span::styled(format!("  {}: ", label), Style::default().fg(Color::DarkGray)),
-        Span::styled(value.to_string(), Style::default().fg(Color::White)),
-    ]))
-}
+// fn info_line<'a>(label: &'a str, value: &'a str) -> Paragraph<'a> {
+//     Paragraph::new(Spans::from(vec![
+//         Span::styled(format!("  {}: ", label), Style::default().fg(Color::DarkGray)),
+//         Span::styled(value.to_string(), Style::default().fg(Color::White)),
+//     ]))
+// }
 
 // Truncate string with ellipsis
 fn clip(s: &str, max: usize) -> String {

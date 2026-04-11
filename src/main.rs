@@ -1,31 +1,40 @@
-// main.rs — ktop entry point
-// wires the collector and TUI together in a simple loop
-
 mod system;
 mod ui;
 
 use std::{thread, time::Duration};
-use system::Collector;
+use system::{Collector, SortBy};
+use ui::AppState;
 
 fn main() -> std::io::Result<()> {
     let mut terminal = ui::setup()?;
     let mut collector = Collector::new();
-
-    // first collect so we have real data on frame 1
     let mut stats = collector.collect();
+    let mut state = AppState::default();
+    let mut tick = 0u32;
 
     loop {
-        terminal.draw(|f| ui::draw(f, &stats))?;
+        terminal.draw(|f| ui::draw(f, &stats, &mut state))?;
 
-        // sleep 1s total but check for 'q' every 50ms
-        for _ in 0..20 {
-            if ui::should_quit() {
+        match ui::poll_event(&mut state) {
+            ui::Action::Quit => {
                 ui::teardown(&mut terminal)?;
                 return Ok(());
             }
-            thread::sleep(Duration::from_millis(50));
+            ui::Action::Refresh => {
+                stats = collector.collect();
+                stats.sort_processes(state.sort_by);
+                tick = 0;
+            }
+            ui::Action::None => {}
         }
 
-        stats = collector.collect();
+        thread::sleep(Duration::from_millis(50));
+        tick += 1;
+
+        if tick >= 20 {
+            stats = collector.collect();
+            stats.sort_processes(state.sort_by);
+            tick = 0;
+        }
     }
 }
