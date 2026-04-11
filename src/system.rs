@@ -59,6 +59,7 @@ impl Collector {
         Self { sys }
     }
 
+    #[allow(clippy::field_reassign_with_default)]
     pub fn collect(&mut self) -> SystemStats {
         self.sys.refresh_all();
         self.sys.refresh_disks_list();
@@ -144,7 +145,7 @@ fn top_dirs(disk_total_gb: f64) -> Vec<DirInfo> {
     // use `du` for fast recursive size — much faster than walking ourselves
     // -x = stay on same filesystem, -d1 = one level deep, --block-size=1M
     let output = Command::new("du")
-        .args(&["-x", "-d", "1", "--block-size=1M", "/"])
+        .args(["-x", "-d", "1", "--block-size=1M", "/"])
         .output();
 
     let Ok(out) = output else { return vec![]; };

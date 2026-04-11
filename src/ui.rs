@@ -108,11 +108,10 @@ fn handle_mouse(state: &mut AppState, m: MouseEvent) -> Action {
             }
 
             // check process row click (select row)
-            if let (Some(area), Some(header_y)) = (state.proc_area, state.proc_header_y) {
-                if in_rect(col, row, area) && row > header_y {
-                    let idx = (row - header_y - 1) as usize;
-                    state.selected_row = Some(idx);
-                }
+            if let (Some(area), Some(header_y)) = (state.proc_area, state.proc_header_y)
+                && in_rect(col, row, area) && row > header_y {
+                let idx = (row - header_y - 1) as usize;
+                state.selected_row = Some(idx);
             }
             Action::None
         }
