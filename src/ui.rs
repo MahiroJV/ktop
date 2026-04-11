@@ -1,42 +1,49 @@
-// ui.rs — TUI rendering using tui 0.19 + crossterm 0.27
+// ui.rs — futuristic dashboard grid with mouse + sorting
+// tui 0.19 + crossterm 0.27
 
 use tui::{
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Span, Spans},
-    widgets::{Block, Borders, Cell, BorderType, Gauge, Paragraph, Row, Table},
+    widgets::{Block, Borders, BorderType, Cell, Gauge, Paragraph, Row, Table},
     Frame, Terminal,
 };
-
 use crossterm::{
-    event::{self, Event, KeyCode, MouseButton, MouseEvent, MouseEventKind, EnableMouseCapture, DisableMouseCapture},
+    event::{
+        self, Event, KeyCode, MouseButton, MouseEvent, MouseEventKind,
+        EnableMouseCapture, DisableMouseCapture,
+    },
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use std::{io, time::Duration};
 use crate::system::{SystemStats, SortBy};
 
-//// ── Color palette ─────────────────────────────────────────────────────────────
-const C_ACCENT: Color = Color::Cyan;
-const C_PURPLE: Color = Color::Magenta;
-const C_GREEN: Color = Color::Green;
-const C_YELLOW: Color = Color::Yellow;
-const C_DIM: Color = Color::DarkGray;
-const C_WHITE: Color = Color::White;
-const C_RED: Color = Color::Red;
+// ── Re-export so main.rs can use these ───────────────────────────────────────
+
+// ── Color palette ─────────────────────────────────────────────────────────────
+const C_ACCENT:  Color = Color::Cyan;
+const C_PURPLE:  Color = Color::Magenta;
+const C_GREEN:   Color = Color::Green;
+const C_YELLOW:  Color = Color::Yellow;
+const C_RED:     Color = Color::Red;
+const C_DIM:     Color = Color::DarkGray;
+const C_WHITE:   Color = Color::White;
 
 // ── App state (sort + mouse selection) ───────────────────────────────────────
 #[derive(Default)]
 pub struct AppState {
-    pub sort_by: SortBy,
-    pub selected_row: Option<usize>,
-    pub proc_area: Option<Rect>,
-    pub proc_header_y: Option<u16>,
-    pub sort_buttons: Vec<(Rect, SortBy)>,
+    pub sort_by:       SortBy,
+    pub selected_row:  Option<usize>,  // hovered process row
+    // cached rects for hit-testing mouse clicks
+    pub proc_area:     Option<Rect>,
+    pub proc_header_y: Option<u16>,    // y of the process table header row
+    pub sort_buttons:  Vec<(Rect, SortBy)>, // clickable sort button areas
 }
 
-pub enum Action{
+// ── Actions returned from event poll ─────────────────────────────────────────
+pub enum Action {
     Quit,
     Refresh,
     None,
@@ -47,6 +54,7 @@ pub enum Action{
 pub fn setup() -> io::Result<Terminal<CrosstermBackend<io::Stdout>>> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
+    // enable mouse capture so we get click/scroll events
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
     Terminal::new(CrosstermBackend::new(stdout))
 }
@@ -55,16 +63,6 @@ pub fn teardown(term: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::Result
     disable_raw_mode()?;
     execute!(term.backend_mut(), LeaveAlternateScreen, DisableMouseCapture)?;
     term.show_cursor()
-}
-
-// Returns true if 'q' was pressed
-pub fn should_quit() -> bool {
-    if event::poll(Duration::from_millis(0)).unwrap_or(false) {
-        if let Ok(Event::Key(k)) = event::read() {
-            return matches!(k.code, KeyCode::Char('q') | KeyCode::Char('Q'));
-        }
-    }
-    false
 }
 
 // ── Event polling ─────────────────────────────────────────────────────────────
@@ -304,8 +302,8 @@ fn draw_memory(f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, s: &Syst
         ])
         .split(inner);
 
-    f.render_widget(fancy_gauge(s.mem_percent as u16, "RAM ", C_PURPLE), rows[0]);
-    f.render_widget(stat_line("Used", &format!("{} MB / {} MB", s.mem_used, s.mem_total), C_PURPLE), rows[1]);
+    f.render_widget(fancy_gauge(s.mem_percent as u16, "  RAM ", C_PURPLE), rows[0]);
+    f.render_widget(stat_line("  ◇", &format!("{} MB / {} MB", s.mem_used, s.mem_total), C_PURPLE), rows[1]);
     f.render_widget(
         Paragraph::new(Spans::from(Span::styled(" ┄ swap ┄", Style::default().fg(C_DIM)))),
         rows[2],
@@ -313,60 +311,8 @@ fn draw_memory(f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, s: &Syst
     f.render_widget(fancy_gauge(s.swap_percent as u16, "  SWAP", C_ACCENT), rows[3]);
     f.render_widget(stat_line("  ◇", &format!("{} MB / {} MB", s.swap_used, s.swap_total), C_ACCENT), rows[4]);
 }
-// ── Disk ──────────────────────────────────────────────────────────────────────
 
-fn draw_disk(f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, s: &SystemStats) {
-    let title = format!(" Disk  [{}] ", clip(&s.disk_name, 18));
-    let block = future_block(&title, C_GREEN);
-    let inner = block.inner(area);
-    f.render_widget(block, area);
-
-    let rows = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(1), Constraint::Length(1)])
-        .split(inner);
-
-    f.render_widget(fancy_gauge(s.disk_percent as u16, "  /   ", C_GREEN), rows[0]);
-    f.render_widget(
-        stat_line("  ◇", &format!("{:.1} GB / {:.1} GB", s.disk_used_gb, s.disk_total_gb), C_GREEN),
-        rows[1],
-    );
-}
-
-// ── Network ───────────────────────────────────────────────────────────────────
-
-fn draw_network(f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, s: &SystemStats) {
-    let title = format!(" Network  [{}] ", clip(&s.net_iface, 12));
-    let block = future_block(&title, C_YELLOW);
-    let inner = block.inner(area);
-    f.render_widget(block, area);
-
-    let rows = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(1), Constraint::Length(1), Constraint::Length(1)])
-        .split(inner);
-
-    f.render_widget(
-        Paragraph::new(Spans::from(vec![
-            Span::styled("  ▼ ", Style::default().fg(C_GREEN).add_modifier(Modifier::BOLD)),
-            Span::styled(format!("{:>6} KB/s", s.net_rx_kbs), Style::default().fg(C_WHITE)),
-            Span::styled("  ▲ ", Style::default().fg(C_YELLOW).add_modifier(Modifier::BOLD)),
-            Span::styled(format!("{:>6} KB/s", s.net_tx_kbs), Style::default().fg(C_WHITE)),
-        ])),
-        rows[0],
-    );
-    f.render_widget(
-        Paragraph::new(Spans::from(vec![
-            Span::styled("  ◇ ↓ ", Style::default().fg(C_DIM)),
-            Span::styled(format!("{} MB", s.net_rx_total_mb), Style::default().fg(C_WHITE)),
-            Span::styled("  ↑ ", Style::default().fg(C_DIM)),
-            Span::styled(format!("{} MB", s.net_tx_total_mb), Style::default().fg(C_WHITE)),
-        ])),
-        rows[1],
-    );
-}
-
-// ── Process table ─────────────────────────────────────────────────────────────
+// ── Processes (with sort buttons + mouse highlight) ───────────────────────────
 
 fn draw_processes(
     f: &mut Frame<CrosstermBackend<io::Stdout>>,
@@ -443,6 +389,7 @@ fn draw_processes(
 // ── Sort button bar ───────────────────────────────────────────────────────────
 
 fn draw_sort_bar(f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, state: &mut AppState) {
+    // define clickable sort buttons: label, sort mode
     let buttons: &[(&str, SortBy)] = &[
         ("CPU▼", SortBy::CpuDesc),
         ("CPU▲", SortBy::CpuAsc),
@@ -476,6 +423,60 @@ fn draw_sort_bar(f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, state:
         if x >= area.x + area.width { break; }
     }
 }
+
+// ── Disk ──────────────────────────────────────────────────────────────────────
+
+fn draw_disk(f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, s: &SystemStats) {
+    let title = format!("◈ DISK  ⟨{}⟩", clip(&s.disk_name, 12));
+    let block = future_block(&title, C_GREEN);
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(1), Constraint::Length(1), Constraint::Min(0)])
+        .split(inner);
+
+    f.render_widget(fancy_gauge(s.disk_percent as u16, "  /   ", C_GREEN), rows[0]);
+    f.render_widget(
+        stat_line("  ◇", &format!("{:.1} GB / {:.1} GB", s.disk_used_gb, s.disk_total_gb), C_GREEN),
+        rows[1],
+    );
+}
+
+// ── Network ───────────────────────────────────────────────────────────────────
+
+fn draw_network(f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, s: &SystemStats) {
+    let title = format!("◈ NET  ⟨{}⟩", clip(&s.net_iface, 10));
+    let block = future_block(&title, C_YELLOW);
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(1), Constraint::Length(1), Constraint::Min(0)])
+        .split(inner);
+
+    f.render_widget(
+        Paragraph::new(Spans::from(vec![
+            Span::styled("  ▼ ", Style::default().fg(C_GREEN).add_modifier(Modifier::BOLD)),
+            Span::styled(format!("{:>6} KB/s", s.net_rx_kbs), Style::default().fg(C_WHITE)),
+            Span::styled("  ▲ ", Style::default().fg(C_YELLOW).add_modifier(Modifier::BOLD)),
+            Span::styled(format!("{:>6} KB/s", s.net_tx_kbs), Style::default().fg(C_WHITE)),
+        ])),
+        rows[0],
+    );
+    f.render_widget(
+        Paragraph::new(Spans::from(vec![
+            Span::styled("  ◇ ↓ ", Style::default().fg(C_DIM)),
+            Span::styled(format!("{} MB", s.net_rx_total_mb), Style::default().fg(C_WHITE)),
+            Span::styled("  ↑ ", Style::default().fg(C_DIM)),
+            Span::styled(format!("{} MB", s.net_tx_total_mb), Style::default().fg(C_WHITE)),
+        ])),
+        rows[1],
+    );
+}
+
 // ── Footer ────────────────────────────────────────────────────────────────────
 
 fn draw_footer(f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, state: &AppState) {
@@ -503,9 +504,8 @@ fn draw_footer(f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, state: &
     );
 }
 
-// ── Shared widget helpers ─────────────────────────────────────────────────────
+// ── Widget helpers ────────────────────────────────────────────────────────────
 
-// Colored gauge — green < 60, yellow < 85, red >= 85
 fn fancy_gauge(percent: u16, label: &str, color: Color) -> Gauge {
     let pct = percent.min(100);
     let bar_color = if pct >= 85 { C_RED }
@@ -522,7 +522,6 @@ fn fancy_gauge(percent: u16, label: &str, color: Color) -> Gauge {
         ))
 }
 
-// Box with cyan border + bold title
 fn future_block(title: &str, color: Color) -> Block {
     Block::default()
         .title(Spans::from(vec![
@@ -542,11 +541,14 @@ fn stat_line<'a>(prefix: &'a str, value: &'a str, color: Color) -> Paragraph<'a>
         Span::styled(value.to_string(), Style::default().fg(C_WHITE)),
     ]))
 }
+
+// Show sort indicator arrow in column header
 fn sort_col_label(base: &str, current: SortBy, desc: SortBy, asc: SortBy) -> String {
     if current == desc      { format!("{} ▼", base) }
     else if current == asc  { format!("{} ▲", base) }
     else                    { base.to_string() }
 }
+
 fn sort_label(s: SortBy) -> &'static str {
     match s {
         SortBy::CpuDesc => "cpu ▼",
@@ -558,26 +560,16 @@ fn sort_label(s: SortBy) -> &'static str {
     }
 }
 
-// "  Label: value" dim/white info line
-// fn info_line<'a>(label: &'a str, value: &'a str) -> Paragraph<'a> {
-//     Paragraph::new(Spans::from(vec![
-//         Span::styled(format!("  {}: ", label), Style::default().fg(Color::DarkGray)),
-//         Span::styled(value.to_string(), Style::default().fg(Color::White)),
-//     ]))
-// }
-
-// Truncate string with ellipsis
 fn clip(s: &str, max: usize) -> String {
     if s.len() <= max { s.to_string() }
     else { format!("{}…", &s[..max.saturating_sub(1)]) }
 }
 
-// Simple UTC time from epoch (no external crate needed)
 fn wall_time() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
     let secs = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
-    format!("{:02}:{:02}:{:02} UTC", (secs % 86400) / 3600, (secs % 3600) / 60, secs % 60)
+    format!("{:02}:{:02}:{:02}", (secs % 86400) / 3600, (secs % 3600) / 60, secs % 60)
 }

@@ -1,4 +1,10 @@
-use sysinfo::{System, SystemExt, CpuExt, ProcessExt, NetworkExt, DiskExt, PidExt, Process};
+// system.rs — all data collection
+// sysinfo 0.29 uses trait-based API: import the XxxExt trait to access methods
+
+use sysinfo::{
+    System, SystemExt, CpuExt, ProcessExt,
+    NetworkExt, DiskExt, PidExt,
+};
 
 #[derive(Default, Clone)]
 pub struct SystemStats {
@@ -125,15 +131,17 @@ fn pct(used: u64, total: u64) -> u32 {
     if total == 0 { 0 } else { (used * 100 / total) as u32 }
 }
 
+// ── Sorting ───────────────────────────────────────────────────────────────────
+
 #[derive(Clone, Copy, PartialEq, Default)]
 pub enum SortBy {
     #[default]
-    CpuDesc,
-    CpuAsc,
-    MemDesc,
-    MemAsc,
-    Pid,
-    Name
+    CpuDesc,   // most CPU first (default)
+    CpuAsc,    // least CPU first
+    MemDesc,   // most memory first
+    MemAsc,    // least memory first
+    Pid,       // by PID ascending
+    Name,      // alphabetical
 }
 
 impl SystemStats {
@@ -141,12 +149,12 @@ impl SystemStats {
         match sort {
             SortBy::CpuDesc => self.processes.sort_by(|a, b|
                 b.cpu.partial_cmp(&a.cpu).unwrap_or(std::cmp::Ordering::Equal)),
-            SortBy::CpuAsc => self.processes.sort_by(|a, b|
+            SortBy::CpuAsc  => self.processes.sort_by(|a, b|
                 a.cpu.partial_cmp(&b.cpu).unwrap_or(std::cmp::Ordering::Equal)),
             SortBy::MemDesc => self.processes.sort_by(|a, b| b.mem_mb.cmp(&a.mem_mb)),
-            SortBy::MemAsc => self.processes.sort_by(|a, b| a.mem_mb.cmp(&b.mem_mb)),
-            SortBy::Pid => self.processes.sort_by(|a, b| a.pid.cmp(&b.pid)),
-            SortBy::Name => self.processes.sort_by(|a, b| a.name.cmp(&b.name))
+            SortBy::MemAsc  => self.processes.sort_by(|a, b| a.mem_mb.cmp(&b.mem_mb)),
+            SortBy::Pid     => self.processes.sort_by(|a, b| a.pid.cmp(&b.pid)),
+            SortBy::Name    => self.processes.sort_by(|a, b| a.name.cmp(&b.name)),
         }
     }
 }
