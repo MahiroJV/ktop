@@ -1,4 +1,5 @@
 # ktop 🔥
+[![Build Status](https://github.com/MahiroJV/ktop/actions/workflows/rust.yml/badge.svg)](https://github.com/MahiroJV/ktop/actions)
 
 **koktail's system monitor** — a btop-inspired TUI written in Rust.
 
