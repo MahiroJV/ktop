@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow2">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="bggrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0a0a14"/>
+      <stop offset="100%" style="stop-color:#0d0520"/>
+    </linearGradient>
+    <linearGradient id="bargrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#00ffff"/>
+      <stop offset="100%" style="stop-color:#b400ff"/>
+    </linearGradient>
+    <linearGradient id="titlegrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#00ffff"/>
+      <stop offset="50%" style="stop-color:#ffffff"/>
+      <stop offset="100%" style="stop-color:#b400ff"/>
+    </linearGradient>
+  </defs>
+
+  <!-- background -->
+  <rect width="512" height="512" rx="90" fill="url(#bggrad)"/>
+
+  <!-- outer glow border -->
+  <rect x="8" y="8" width="496" height="496" rx="86" fill="none"
+        stroke="#b400ff" stroke-width="3" opacity="0.6" filter="url(#glow)"/>
+  <!-- inner border -->
+  <rect x="22" y="22" width="468" height="468" rx="74" fill="none"
+        stroke="#00ffff" stroke-width="1.5" opacity="0.25"/>
+
+  <!-- terminal screen -->
+  <rect x="52" y="52" width="408" height="290" rx="14" fill="#08081a"/>
+  <rect x="52" y="52" width="408" height="290" rx="14" fill="none"
+        stroke="#00ffff" stroke-width="1.5" opacity="0.5"/>
+
+  <!-- screen top bar -->
+  <rect x="52" y="52" width="408" height="28" rx="14" fill="#0f0f28"/>
+  <rect x="52" y="66" width="408" height="14" fill="#0f0f28"/>
+  <!-- dots -->
+  <circle cx="80"  cy="66" r="5" fill="#ff5f57" opacity="0.8"/>
+  <circle cx="98"  cy="66" r="5" fill="#ffbd2e" opacity="0.8"/>
+  <circle cx="116" cy="66" r="5" fill="#28c840" opacity="0.8"/>
+  <!-- screen title -->
+  <text x="256" y="71" font-family="monospace" font-size="11"
+        fill="#00ffff" text-anchor="middle" opacity="0.7">kctop</text>
+
+  <!-- CPU label -->
+  <text x="72" y="108" font-family="monospace" font-size="10" fill="#00ffff" opacity="0.6">CPU</text>
+  <!-- CPU total bar -->
+  <rect x="104" y="98" width="200" height="12" rx="6" fill="#0d0d2a"/>
+  <rect x="104" y="98" width="132" height="12" rx="6" fill="url(#bargrad)" filter="url(#glow2)"/>
+  <text x="312" y="109" font-family="monospace" font-size="10" fill="#00ffff">66%</text>
+
+  <!-- core bars -->
+  <text x="72" y="126" font-family="monospace" font-size="9" fill="#505070">C0</text>
+  <rect x="96" y="117" width="200" height="8" rx="4" fill="#0d0d2a"/>
+  <rect x="96" y="117" width="150" height="8" rx="4" fill="#00ffff" opacity="0.7"/>
+
+  <text x="72" y="140" font-family="monospace" font-size="9" fill="#505070">C1</text>
+  <rect x="96" y="131" width="200" height="8" rx="4" fill="#0d0d2a"/>
+  <rect x="96" y="131" width="90" height="8" rx="4" fill="#b400ff" opacity="0.7"/>
+
+  <text x="72" y="154" font-family="monospace" font-size="9" fill="#505070">C2</text>
+  <rect x="96" y="145" width="200" height="8" rx="4" fill="#0d0d2a"/>
+  <rect x="96" y="145" width="120" height="8" rx="4" fill="#00ffff" opacity="0.5"/>
+
+  <text x="72" y="168" font-family="monospace" font-size="9" fill="#505070">C3</text>
+  <rect x="96" y="159" width="200" height="8" rx="4" fill="#0d0d2a"/>
+  <rect x="96" y="159" width="60" height="8"  rx="4" fill="#b400ff" opacity="0.5"/>
+
+  <!-- MEM label -->
+  <text x="72" y="192" font-family="monospace" font-size="10" fill="#b400ff" opacity="0.6">MEM</text>
+  <rect x="104" y="182" width="200" height="12" rx="6" fill="#0d0d2a"/>
+  <rect x="104" y="182" width="160" height="12" rx="6" fill="#b400ff" opacity="0.8" filter="url(#glow2)"/>
+  <text x="312" y="193" font-family="monospace" font-size="10" fill="#b400ff">80%</text>
+
+  <!-- divider -->
+  <line x1="72" y1="206" x2="440" y2="206" stroke="#1a1a3a" stroke-width="1"/>
+
+  <!-- process list -->
+  <text x="72"  y="222" font-family="monospace" font-size="10" fill="#00ffff" font-weight="bold"> 3241  kctop        72.9%</text>
+  <text x="72"  y="236" font-family="monospace" font-size="10" fill="#606080"> 1892  firefox      14.2%</text>
+  <text x="72"  y="250" font-family="monospace" font-size="10" fill="#606080"> 4102  rustrover     8.1%</text>
+  <text x="72"  y="264" font-family="monospace" font-size="10" fill="#404060">  891  Xorg          1.0%</text>
+  <text x="72"  y="278" font-family="monospace" font-size="10" fill="#303050">  204  systemd       0.3%</text>
+
+  <!-- bottom bar -->
+  <text x="72" y="326" font-family="monospace" font-size="9" fill="#303050">◈ q:quit  c/C:cpu  m/M:mem  p:pid  n:name</text>
+
+  <!-- ── Big title ── -->
+  <!-- shadow -->
+  <text x="260" y="418" font-family="monospace" font-size="72" font-weight="bold"
+        fill="#b400ff" text-anchor="middle" opacity="0.3" filter="url(#glow)">kctop</text>
+  <!-- main -->
+  <text x="256" y="415" font-family="monospace" font-size="72" font-weight="bold"
+        fill="url(#titlegrad)" text-anchor="middle" filter="url(#glow)">kctop</text>
+
+  <!-- bottom accent line -->
+  <line x1="100" y1="465" x2="412" y2="465" stroke="url(#bargrad)" stroke-width="1.5" opacity="0.4"/>
+</svg>

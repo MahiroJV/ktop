@@ -32,8 +32,14 @@ pub struct SystemStats {
     pub net_tx_total_mb: u64,
 
     pub processes: Vec<ProcInfo>,
+    pub disk_dirs: Vec<DirInfo>
 }
-
+#[derive(Clone, Default)]
+pub struct DirInfo {
+    pub path:    String,
+    pub size_gb: f64,
+    pub percent: u32,  // % of total disk
+}
 #[derive(Clone)]
 pub struct ProcInfo {
     pub pid:    u32,
@@ -92,6 +98,10 @@ impl Collector {
             s.disk_percent  = (used * 100 / total.max(1)) as u32;
         }
 
+        // ── Disk directories ─────────────────────────────────────────────────
+        // scan top-level dirs in / to show biggest space users
+        s.disk_dirs = top_dirs(s.disk_total_gb);
+
         // ── Network ───────────────────────────────────────────────────────────
         // pick non-loopback with most cumulative received bytes
         let mut best = 0u64;
@@ -125,6 +135,48 @@ impl Collector {
 
         s
     }
+}
+
+// Scan top-level directories and return sorted by size (biggest first)
+fn top_dirs(disk_total_gb: f64) -> Vec<DirInfo> {
+    use std::process::Command;
+
+    // use `du` for fast recursive size — much faster than walking ourselves
+    // -x = stay on same filesystem, -d1 = one level deep, --block-size=1M
+    let output = Command::new("du")
+        .args(&["-x", "-d", "1", "--block-size=1M", "/"])
+        .output();
+
+    let Ok(out) = output else { return vec![]; };
+    if !out.status.success() { return vec![]; }
+
+    let text = String::from_utf8_lossy(&out.stdout);
+    let mut dirs: Vec<(u64, String)> = text
+        .lines()
+        .filter_map(|line| {
+            let mut parts = line.splitn(2, '\t');
+            let size_mb: u64 = parts.next()?.parse().ok()?;
+            let path = parts.next()?.trim().to_string();
+            // skip the root entry itself and tiny dirs
+            if path == "/" || size_mb < 10 { return None; }
+            Some((size_mb, path))
+        })
+        .collect();
+
+    // sort biggest first
+    dirs.sort_by(|a, b| b.0.cmp(&a.0));
+
+    dirs.iter().take(8).map(|(size_mb, path)| {
+        let size_gb = *size_mb as f64 / 1024.0;
+        let percent = if disk_total_gb > 0.0 {
+            (size_gb / disk_total_gb * 100.0) as u32
+        } else { 0 };
+        DirInfo {
+            path: path.clone(),
+            size_gb,
+            percent,
+        }
+    }).collect()
 }
 
 fn pct(used: u64, total: u64) -> u32 {

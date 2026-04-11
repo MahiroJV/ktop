@@ -470,16 +470,80 @@ fn draw_disk(f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, s: &System
     let inner = block.inner(area);
     f.render_widget(block, area);
 
+    // layout: usage bar + size line + divider + dir rows
+    let dir_count  = s.disk_dirs.len().min(6);
+    let mut constraints = vec![
+        Constraint::Length(1), // usage bar
+        Constraint::Length(1), // used/total
+        Constraint::Length(1), // ┄ dirs ┄
+    ];
+    for _ in 0..dir_count { constraints.push(Constraint::Length(1)); }
+    constraints.push(Constraint::Min(0));
+
     let rows = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(1), Constraint::Length(1), Constraint::Min(0)])
+        .constraints(constraints)
         .split(inner);
 
-    f.render_widget(fancy_gauge(s.disk_percent as u16, "  /   ", C_GREEN), rows[0]);
+    // overall disk bar
+    let bar_w = inner.width.saturating_sub(14) as usize;
+    f.render_widget(cpu_bar(s.disk_percent as u16, bar_w, "/", C_GREEN, true), rows[0]);
     f.render_widget(
         stat_line("  ◇", &format!("{:.1} GB / {:.1} GB", s.disk_used_gb, s.disk_total_gb), C_GREEN),
         rows[1],
     );
+
+    // divider
+    f.render_widget(
+        Paragraph::new(Spans::from(Span::styled(
+            " ┄ top dirs ┄──────────────────────────────────",
+            Style::default().fg(C_DIM),
+        ))),
+        rows[2],
+    );
+
+    // directory rows
+    for (i, dir) in s.disk_dirs.iter().take(6).enumerate() {
+        let bar_w = inner.width.saturating_sub(16) as usize;
+        let color = match i % 3 { 0 => C_GREEN, 1 => C_ACCENT, _ => C_PURPLE };
+        let label = clip_path(&dir.path, 6);
+        let filled = (bar_w * dir.percent as usize / 100).min(bar_w);
+        let empty  = bar_w.saturating_sub(filled);
+
+        f.render_widget(
+            Paragraph::new(Spans::from(vec![
+                Span::styled(format!(" {:<7}", label), Style::default().fg(C_DIM)),
+                Span::styled("▐".to_string(), Style::default().fg(color)),
+                Span::styled("█".repeat(filled), Style::default().fg(color)),
+                Span::styled("░".repeat(empty),  Style::default().fg(Color::Rgb(20, 30, 20))),
+                Span::styled("▌".to_string(), Style::default().fg(color)),
+                Span::styled(
+                    format!(" {:.1}G", dir.size_gb),
+                    Style::default().fg(C_WHITE),
+                ),
+            ])),
+            rows[i + 3],
+        );
+    }
+
+    // if dirs not yet loaded
+    if s.disk_dirs.is_empty() {
+        f.render_widget(
+            Paragraph::new(Spans::from(Span::styled(
+                "  scanning...",
+                Style::default().fg(C_DIM),
+            ))),
+            rows[3],
+        );
+    }
+}
+
+// Clip path to last N chars with leading slash
+fn clip_path(path: &str, max: usize) -> String {
+    let name = path.trim_end_matches('/');
+    let last = name.rsplit('/').next().unwrap_or(name);
+    if last.len() <= max { format!("/{}", last) }
+    else { format!("/{}…", &last[..max.saturating_sub(1)]) }
 }
 
 // ── Network ───────────────────────────────────────────────────────────────────
