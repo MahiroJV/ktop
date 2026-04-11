@@ -145,29 +145,36 @@ pub fn collect_disk_dirs() -> Vec<DirInfo> {
 fn top_dirs(_disk_total_gb: f64) -> Vec<DirInfo> {
     use std::process::Command;
 
+    // only scan these specific dirs — instant, no hanging
+    let targets = [
+        "/home", "/usr", "/var", "/opt", "/tmp",
+        "/boot", "/srv", "/root", "/snap",
+    ];
 
-    // use `du` for fast recursive size — much faster than walking ourselves
-    // -x = stay on same filesystem, -d1 = one level deep, --block-size=1M
-    let output =
-        Command::new("du")
-        .args(["-x", "-d", "1", "--block-size=1M", "/"])
-        .output();
+    let mut dirs: Vec<(u64, String)> = Vec::new();
+    for target in &targets {
+        // check dir exists first
+        if !std::path::Path::new(target).exists() { continue; }
 
-    let Ok(out) = output else { return vec![]; };
-    if !out.status.success() { return vec![]; }
+        // du -sm = summary in MB, -x = same filesystem, 2s timeout via take
+        let result = Command::new("du")
+            .args(["-s", "-m", "-x", target])
+            .output();
 
-    let text = String::from_utf8_lossy(&out.stdout);
-    let mut dirs: Vec<(u64, String)> = text
-        .lines()
-        .filter_map(|line| {
+        let Ok(out) = result else { continue; };
+
+        let text = String::from_utf8_lossy(&out.stdout);
+        if let Some(line) = text.lines().next() {
             let mut parts = line.splitn(2, '\t');
-            let size_mb: u64 = parts.next()?.parse().ok()?;
-            let path = parts.next()?.trim().to_string();
-            if path == "/" || size_mb < 10 { return None; }
-            Some((size_mb, path))
-        })
-        .collect();
-
+            if let (Some(size_str), Some(_path)) = (parts.next(), parts.next()) {
+                if let Ok(size_mb) = size_str.trim().parse::<u64>() {
+                    if size_mb > 0 {
+                        dirs.push((size_mb, target.to_string()));
+                    }
+                }
+            }
+        }
+    }
     // sort biggest first
     dirs.sort_by(|a, b| b.0.cmp(&a.0));
 
