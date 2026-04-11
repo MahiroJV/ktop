@@ -1,5 +1,26 @@
-# ktop 🔥
-[![Build Status](https://github.com/MahiroJV/ktop/actions/workflows/rust.yml/badge.svg)](https://github.com/MahiroJV/ktop/actions)
+<div align="center">
+  <img src="assets/logo.png" height="128" alt="ktop logo">
+  
+  <h1 align="center" style="border:0;">ktop 🔥</h1>
+  
+  <p align="center">A minimalist, cross-platform system monitor for your terminal.</p>
+
+  <p align="center">
+   <img src="https://github.com/MahiroJV/ktop/actions/workflows/rust.yml/badge.svg" alt="CI">
+    <a href="https://github.com/MahiroJV/ktop/stargazers">
+      <img src="https://img.shields.io/github/stars/MahiroJV/ktop">
+    </a> 
+    <img src="https://img.shields.io/badge/Rust-orange?style=flat&logo=rust&logoColor=white" alt="Rust">
+    <img src="https://img.shields.io/badge/Linux-E11837?style=flat&logo=linux&logoColor=white" alt="Linux">
+    <img src="https://img.shields.io/github/repo-size/MahiroJV/ktop?style=tyle=flat&color=blue" alt="size">
+    <img src="https://img.shields.io/badge/Status-Active-brightgreen?style=flat" alt="Status">
+  </p>
+
+  <br>
+
+</div>
+
+# Overview
 
 **koktail's system monitor** — a btop-inspired TUI written in Rust.
 
@@ -82,6 +103,10 @@ rm ~/.local/bin/ktop
 | Key | Action |
 |-----|--------|
 | `q` | Quit   |
+| `c/C`| Sort by CPU usage |
+| `m/M`| Sort by Memory usage |
+| `p` | Sort by ID |
+| `n` | Sort by Name |
 
 ## Dependencies
 
