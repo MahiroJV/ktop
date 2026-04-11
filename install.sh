@@ -27,8 +27,23 @@ echo ""
 
 # ── Check cargo ───────────────────────────────────────────────────────────────
 info "Checking cargo..."
-command -v cargo &>/dev/null || error "cargo not found — install Rust from https://rustup.rs"
-success "cargo $(cargo --version | cut -d' ' -f2) found"
+
+if command -v cargo &>/dev/null; then
+    success "cargo $(cargo --version | cut -d' ' -f2) found"
+else
+    warn "cargo not found — installing Rust..."
+
+    # Rust install (non-interactive)
+    curl https://sh.rustup.rs -sSf | sh -s -- -y
+
+    # environment reload
+    source "$HOME/.cargo/env"
+
+    # yenidən yoxla
+    command -v cargo &>/dev/null || error "Rust installation failed"
+
+    success "Rust installed: $(cargo --version | cut -d' ' -f2)"
+fi
 
 # ── Build release binary ───────────────────────────────────────────────────────
 info "Building ktop (release)..."
