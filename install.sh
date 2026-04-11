@@ -59,6 +59,39 @@ else
     warn "Icon file kctop.svg not found — skipping"
 fi
 
+# ── Detect terminal emulator ──────────────────────────────────────────────────
+info "Detecting terminal emulator..."
+TERM_EXEC=""
+for term in kitty alacritty wezterm foot xterm konsole gnome-terminal xfce4-terminal mate-terminal tilix; do
+    if command -v "$term" &>/dev/null; then
+        TERM_EXEC="$term"
+        break
+    fi
+done
+
+if [[ -z "$TERM_EXEC" ]]; then
+    warn "No terminal emulator detected — desktop entry may not work"
+    warn "Install one of: kitty, alacritty, xterm, konsole, gnome-terminal"
+    TERM_EXEC="xterm"  # fallback
+else
+    success "Found terminal: $TERM_EXEC"
+fi
+
+# build the Exec line based on which terminal was found
+case "$TERM_EXEC" in
+    kitty)          EXEC_LINE="kitty --hold $BIN_PATH" ;;
+    alacritty)      EXEC_LINE="alacritty --hold -e $BIN_PATH" ;;
+    wezterm)        EXEC_LINE="wezterm start -- $BIN_PATH" ;;
+    foot)           EXEC_LINE="foot $BIN_PATH" ;;
+    xterm)          EXEC_LINE="xterm -e 'kctop; read -p "Press Enter..."'" ;;
+    konsole)        EXEC_LINE="konsole --noclose -e $BIN_PATH" ;;
+    gnome-terminal) EXEC_LINE="gnome-terminal -- bash -c '$BIN_PATH; read -p "Press Enter..."'" ;;
+    xfce4-terminal) EXEC_LINE="xfce4-terminal --hold -e $BIN_PATH" ;;
+    mate-terminal)  EXEC_LINE="mate-terminal --wait -e $BIN_PATH" ;;
+    tilix)          EXEC_LINE="tilix -e $BIN_PATH" ;;
+    *)              EXEC_LINE="xterm -e $BIN_PATH" ;;
+esac
+
 # ── Install .desktop entry ────────────────────────────────────────────────────
 info "Creating desktop entry..."
 mkdir -p "$DESKTOP_DIR"
@@ -68,18 +101,18 @@ Version=1.0
 Type=Application
 Name=kctop
 GenericName=System Monitor
-Comment=koktail's system monitor — futuristic TUI
-Exec=bash -c 'kctop; read -p "Press Enter to close..."'
+Comment=koktail claude's top — futuristic TUI system monitor
+Exec=${EXEC_LINE}
 Icon=${ICON_PATH}
-Terminal=true
+Terminal=false
 Categories=System;Monitor;
-Keywords=cpu;memory;disk;network;monitor;top;htop;
+Keywords=cpu;memory;disk;network;monitor;top;htop;kctop;
 StartupNotify=false
 DESKTOP
 chmod +x "$DESKTOP_PATH"
 # refresh app launcher
 update-desktop-database "$DESKTOP_DIR" 2>/dev/null || true
-success "Desktop entry created"
+success "Desktop entry created (using $TERM_EXEC)"
 
 # ── PATH check ────────────────────────────────────────────────────────────────
 echo ""

@@ -60,7 +60,7 @@ impl Collector {
     }
 
     #[allow(clippy::field_reassign_with_default)]
-    pub fn collect(&mut self) -> SystemStats {
+    pub fn collect_fast(&mut self) -> SystemStats {
         self.sys.refresh_all();
         self.sys.refresh_disks_list();
         self.sys.refresh_disks();
@@ -99,9 +99,6 @@ impl Collector {
             s.disk_percent  = (used * 100 / total.max(1)) as u32;
         }
 
-        // ── Disk directories ─────────────────────────────────────────────────
-        // scan top-level dirs in / to show biggest space users
-        s.disk_dirs = top_dirs(s.disk_total_gb);
 
         // ── Network ───────────────────────────────────────────────────────────
         // pick non-loopback with most cumulative received bytes
@@ -138,14 +135,22 @@ impl Collector {
     }
 }
 
+pub fn collect_disk_dirs() -> Vec<DirInfo> {
+    let disk_total_gb = 0.0_f64;
+    top_dirs(disk_total_gb)
+}
+
+
 // Scan top-level directories and return sorted by size (biggest first)
-fn top_dirs(disk_total_gb: f64) -> Vec<DirInfo> {
+fn top_dirs(_disk_total_gb: f64) -> Vec<DirInfo> {
     use std::process::Command;
+    use std::fs;
 
     // use `du` for fast recursive size — much faster than walking ourselves
     // -x = stay on same filesystem, -d1 = one level deep, --block-size=1M
-    let output = Command::new("du")
-        .args(["-x", "-d", "1", "--block-size=1M", "/"])
+    let output =
+        Command::new("du")
+        .args(&["-x", "-d", "1", "--block-size=1M", "/"])
         .output();
 
     let Ok(out) = output else { return vec![]; };
@@ -158,7 +163,6 @@ fn top_dirs(disk_total_gb: f64) -> Vec<DirInfo> {
             let mut parts = line.splitn(2, '\t');
             let size_mb: u64 = parts.next()?.parse().ok()?;
             let path = parts.next()?.trim().to_string();
-            // skip the root entry itself and tiny dirs
             if path == "/" || size_mb < 10 { return None; }
             Some((size_mb, path))
         })
@@ -169,9 +173,7 @@ fn top_dirs(disk_total_gb: f64) -> Vec<DirInfo> {
 
     dirs.iter().take(8).map(|(size_mb, path)| {
         let size_gb = *size_mb as f64 / 1024.0;
-        let percent = if disk_total_gb > 0.0 {
-            (size_gb / disk_total_gb * 100.0) as u32
-        } else { 0 };
+        let percent = 0u32; // percent calc done in ui based on total
         DirInfo {
             path: path.clone(),
             size_gb,
