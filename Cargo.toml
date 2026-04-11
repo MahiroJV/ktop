@@ -8,5 +8,5 @@ sysinfo = "0.29"
 crossterm = "0.27"
 tui = "0.19"
 [[bin]]
-name = "ktop-r"
+name = "rtop"
 path = "src/main.rs"
