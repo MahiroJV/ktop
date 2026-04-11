@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # install.sh — kctop installer
-# builds release binary, installs to ~/.local/bin,
-# creates .desktop entry and icon so it appears in app launcher
+# works on any Linux distro — Ubuntu, Fedora, Arch, Debian, openSUSE etc.
 
 set -e
 
@@ -26,20 +25,36 @@ ICON_PATH="${ICON_DIR}/kctop.svg"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo ""
-printf "  ${CYAN}${BOLD}kctop${RESET} — koktail's system monitor  ${BOLD}installer${RESET}\n"
+printf "  ${CYAN}${BOLD}kctop${RESET} — koktail claude's top  ${BOLD}installer${RESET}\n"
 echo "  ─────────────────────────────────────────"
 echo ""
 
+# ── OS detection ──────────────────────────────────────────────────────────────
+if [[ -f /etc/os-release ]]; then
+    source /etc/os-release
+    info "Detected: ${NAME} ${VERSION_ID:-}"
+elif [[ "$(uname)" != "Linux" ]]; then
+    error "kctop only supports Linux"
+fi
+
+# ── Check bash version ────────────────────────────────────────────────────────
+if [[ "${BASH_VERSINFO[0]}" -lt 4 ]]; then
+    error "bash 4+ required (you have ${BASH_VERSION})"
+fi
+
 # ── Check cargo ───────────────────────────────────────────────────────────────
 info "Checking cargo..."
-command -v cargo &>/dev/null || error "cargo not found — install Rust from https://rustup.rs"
+if ! command -v cargo &>/dev/null; then
+    error "cargo not found — install Rust from https://rustup.rs\n  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
+fi
 success "cargo $(cargo --version | cut -d' ' -f2) found"
 
 # ── Build release binary ──────────────────────────────────────────────────────
 info "Building kctop (release)..."
 cd "$SCRIPT_DIR"
-cargo build --release 2>&1 | grep -E "Compiling ktop|Finished|^error" || true
-[[ -f "${SCRIPT_DIR}/target/release/kctop" ]] || error "Build failed — run 'cargo build --release' to see full output"
+cargo build --release 2>&1 | grep -E "Compiling kctop|Finished|^error" || true
+[[ -f "${SCRIPT_DIR}/target/release/kctop" ]] || \
+    error "Build failed — run 'cargo build --release' for full output"
 success "Build complete"
 
 # ── Install binary ────────────────────────────────────────────────────────────
@@ -52,44 +67,65 @@ success "Binary installed"
 # ── Install icon ──────────────────────────────────────────────────────────────
 info "Installing icon..."
 mkdir -p "$ICON_DIR"
-if [[ -f "${SCRIPT_DIR}/kctop.svg" ]]; then
+if [[ -f "${SCRIPT_DIR}/assets/kctop.svg" ]]; then
+    cp "${SCRIPT_DIR}/assets/kctop.svg" "$ICON_PATH"
+    success "Icon installed"
+elif [[ -f "${SCRIPT_DIR}/kctop.svg" ]]; then
     cp "${SCRIPT_DIR}/kctop.svg" "$ICON_PATH"
-    success "Icon installed (SVG)"
+    success "Icon installed"
 else
-    warn "Icon file kctop.svg not found — skipping"
+    warn "Icon file not found — skipping"
+    ICON_PATH="utilities-system-monitor"  # fallback to system icon
 fi
 
 # ── Detect terminal emulator ──────────────────────────────────────────────────
 info "Detecting terminal emulator..."
 TERM_EXEC=""
-for term in kitty alacritty wezterm foot xterm konsole gnome-terminal xfce4-terminal mate-terminal tilix; do
-    if command -v "$term" &>/dev/null; then
-        TERM_EXEC="$term"
-        break
-    fi
-done
 
-if [[ -z "$TERM_EXEC" ]]; then
-    warn "No terminal emulator detected — desktop entry may not work"
-    warn "Install one of: kitty, alacritty, xterm, konsole, gnome-terminal"
-    TERM_EXEC="xterm"  # fallback
-else
-    success "Found terminal: $TERM_EXEC"
+# check $TERMINAL env var first (set by some WMs like i3, openbox)
+if [[ -n "$TERMINAL" ]] && command -v "$TERMINAL" &>/dev/null; then
+    TERM_EXEC="$TERMINAL"
 fi
 
-# build the Exec line based on which terminal was found
+# otherwise scan common terminals
+if [[ -z "$TERM_EXEC" ]]; then
+    for term in \
+        kitty alacritty wezterm foot \
+        konsole gnome-terminal xfce4-terminal mate-terminal \
+        tilix terminator lxterminal rxvt-unicode urxvt \
+        st xterm uxterm; do
+        if command -v "$term" &>/dev/null; then
+            TERM_EXEC="$term"
+            break
+        fi
+    done
+fi
+
+if [[ -z "$TERM_EXEC" ]]; then
+    warn "No terminal emulator found — desktop entry will use x-terminal-emulator"
+    TERM_EXEC="x-terminal-emulator"  # Debian/Ubuntu alternatives system
+fi
+
+success "Terminal: $TERM_EXEC"
+
+# build Exec line — each terminal has different flags for "hold open after exit"
 case "$TERM_EXEC" in
-    kitty)          EXEC_LINE="kitty --hold $BIN_PATH" ;;
-    alacritty)      EXEC_LINE="alacritty --hold -e $BIN_PATH" ;;
-    wezterm)        EXEC_LINE="wezterm start -- $BIN_PATH" ;;
-    foot)           EXEC_LINE="foot $BIN_PATH" ;;
-    xterm)          EXEC_LINE="xterm -e 'kctop; read -p "Press Enter..."'" ;;
-    konsole)        EXEC_LINE="konsole --noclose -e $BIN_PATH" ;;
-    gnome-terminal) EXEC_LINE="gnome-terminal -- bash -c '$BIN_PATH; read -p "Press Enter..."'" ;;
-    xfce4-terminal) EXEC_LINE="xfce4-terminal --hold -e $BIN_PATH" ;;
-    mate-terminal)  EXEC_LINE="mate-terminal --wait -e $BIN_PATH" ;;
-    tilix)          EXEC_LINE="tilix -e $BIN_PATH" ;;
-    *)              EXEC_LINE="xterm -e $BIN_PATH" ;;
+    kitty)              EXEC_LINE="kitty --hold ${BIN_PATH}" ;;
+    alacritty)          EXEC_LINE="alacritty --hold -e ${BIN_PATH}" ;;
+    wezterm)            EXEC_LINE="wezterm start -- ${BIN_PATH}" ;;
+    foot)               EXEC_LINE="foot ${BIN_PATH}" ;;
+    konsole)            EXEC_LINE="konsole --noclose -e ${BIN_PATH}" ;;
+    gnome-terminal)     EXEC_LINE="gnome-terminal -- bash -c '${BIN_PATH}; exec bash'" ;;
+    xfce4-terminal)     EXEC_LINE="xfce4-terminal --hold -e ${BIN_PATH}" ;;
+    mate-terminal)      EXEC_LINE="mate-terminal --wait -e ${BIN_PATH}" ;;
+    tilix)              EXEC_LINE="tilix -e ${BIN_PATH}" ;;
+    terminator)         EXEC_LINE="terminator -x ${BIN_PATH}" ;;
+    lxterminal)         EXEC_LINE="lxterminal --command=${BIN_PATH}" ;;
+    rxvt-unicode|urxvt) EXEC_LINE="urxvt -e ${BIN_PATH}" ;;
+    st)                 EXEC_LINE="st -e ${BIN_PATH}" ;;
+    xterm|uxterm)       EXEC_LINE="xterm -hold -e ${BIN_PATH}" ;;
+    x-terminal-emulator) EXEC_LINE="x-terminal-emulator -e ${BIN_PATH}" ;;
+    *)                  EXEC_LINE="${TERM_EXEC} -e ${BIN_PATH}" ;;
 esac
 
 # ── Install .desktop entry ────────────────────────────────────────────────────
@@ -105,31 +141,50 @@ Comment=koktail claude's top — futuristic TUI system monitor
 Exec=${EXEC_LINE}
 Icon=${ICON_PATH}
 Terminal=false
-Categories=System;Monitor;
-Keywords=cpu;memory;disk;network;monitor;top;htop;kctop;
+Categories=System;Monitor;GTK;
+Keywords=cpu;memory;disk;network;monitor;top;htop;kctop;system;
 StartupNotify=false
 DESKTOP
+
 chmod +x "$DESKTOP_PATH"
-# refresh app launcher
-update-desktop-database "$DESKTOP_DIR" 2>/dev/null || true
-success "Desktop entry created (using $TERM_EXEC)"
+
+# refresh app launcher — command differs by distro
+if command -v update-desktop-database &>/dev/null; then
+    update-desktop-database "$DESKTOP_DIR" 2>/dev/null || true
+fi
+if command -v xdg-desktop-menu &>/dev/null; then
+    xdg-desktop-menu forceupdate 2>/dev/null || true
+fi
+
+success "Desktop entry created"
 
 # ── PATH check ────────────────────────────────────────────────────────────────
 echo ""
 if [[ ":$PATH:" != *":${BIN_DIR}:"* ]]; then
     warn "${BIN_DIR} is not in your PATH"
-    warn "Add this to your ~/.bashrc or ~/.zshrc:"
+    echo ""
+
+    # detect shell and suggest right config file
+    SHELL_RC=""
+    case "$(basename "$SHELL")" in
+        bash) SHELL_RC="~/.bashrc" ;;
+        zsh)  SHELL_RC="~/.zshrc" ;;
+        fish) SHELL_RC="~/.config/fish/config.fish" ;;
+        *)    SHELL_RC="~/.profile" ;;
+    esac
+
+    warn "Add this to your ${SHELL_RC}:"
     echo ""
     printf "      ${CYAN}export PATH=\"\$HOME/.local/bin:\$PATH\"${RESET}\n"
     echo ""
-    warn "Then run: source ~/.bashrc"
+    warn "Then run: source ${SHELL_RC}"
     echo ""
 fi
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 echo "  ─────────────────────────────────────────"
-success "${BOLD}kctop installed!${RESET}"
+success "${BOLD}kctop installed successfully!${RESET}"
 echo ""
 printf "  Terminal:     ${CYAN}${BOLD}kctop${RESET}\n"
-printf "  App launcher: search for ${CYAN}${BOLD}kctop${RESET} in your apps\n"
+printf "  App launcher: search for ${CYAN}${BOLD}kctop${RESET}\n"
 echo ""
