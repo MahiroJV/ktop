@@ -183,7 +183,7 @@ fi
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 echo "  ─────────────────────────────────────────"
-printf "  ${GREEN}${BOLD}✓${RESET}  kctop uninstalled successfully!\n"
+printf "  ${GREEN}${BOLD}✓${RESET}  kctop installed successfully!\n"
 echo ""
 printf "  Terminal:     ${CYAN}${BOLD}kctop${RESET}\n"
 printf "  App launcher: search for ${CYAN}${BOLD}kctop${RESET}\n"
