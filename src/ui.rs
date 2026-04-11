@@ -249,15 +249,21 @@ fn draw_header(f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, s: &Syst
 
 // ── CPU ───────────────────────────────────────────────────────────────────────
 
+
 fn draw_cpu(f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, s: &SystemStats) {
     let title = format!("◈ CPU  ⟨{}⟩", clip(&s.cpu_name, 28));
     let block = future_block(&title, C_ACCENT);
     let inner = block.inner(area);
     f.render_widget(block, area);
 
-    let core_count = s.cpu_cores.len().min(6);
-    let mut constraints = vec![Constraint::Length(1), Constraint::Length(1)];
+    let core_count = s.cpu_cores.len().min(8);
+
+    let mut constraints = vec![
+        Constraint::Length(1), // total bar
+        Constraint::Length(1), // cores label
+    ];
     for _ in 0..core_count { constraints.push(Constraint::Length(1)); }
+    constraints.push(Constraint::Length(1)); // freq
     constraints.push(Constraint::Min(0));
 
     let rows = Layout::default()
@@ -265,22 +271,54 @@ fn draw_cpu(f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, s: &SystemS
         .constraints(constraints)
         .split(inner);
 
-    f.render_widget(fancy_gauge(s.cpu_total as u16, "  TOTAL", C_ACCENT), rows[0]);
+    // total bar — full width
+    let bar_w = inner.width.saturating_sub(14) as usize;
+    f.render_widget(cpu_bar(s.cpu_total as u16, bar_w, "TOTAL", C_ACCENT, true), rows[0]);
+
+    // cores divider
     f.render_widget(
-        Paragraph::new(Spans::from(Span::styled(" ┄ cores ┄", Style::default().fg(C_DIM)))),
+        Paragraph::new(Spans::from(Span::styled(
+            " ┄ cores ┄──────────────────────────────────────",
+            Style::default().fg(C_DIM),
+        ))),
         rows[1],
     );
-    for (i, &usage) in s.cpu_cores.iter().take(6).enumerate() {
-        let color = if i % 2 == 0 { C_PURPLE } else { C_ACCENT };
-        f.render_widget(fancy_gauge(usage as u16, &format!("  C{:<2}", i), color), rows[i + 2]);
+
+    // per-core bars — full width each
+    let core_w = inner.width.saturating_sub(14) as usize;
+    for (i, &usage) in s.cpu_cores.iter().take(8).enumerate() {
+        let color = if i % 2 == 0 { C_ACCENT } else { C_PURPLE };
+        f.render_widget(cpu_bar(usage as u16, core_w, &format!("C{}", i), color, false), rows[i + 2]);
     }
+
+    // freq + core count
     f.render_widget(
         Paragraph::new(Spans::from(vec![
-            Span::styled("  ◇ freq ", Style::default().fg(C_DIM)),
+            Span::styled(" ◇ freq ", Style::default().fg(C_DIM)),
             Span::styled(format!("{} MHz", s.cpu_freq), Style::default().fg(C_ACCENT).add_modifier(Modifier::BOLD)),
+            Span::styled("  ◇ cores ", Style::default().fg(C_DIM)),
+            Span::styled(format!("{}", s.cpu_cores.len()), Style::default().fg(C_ACCENT).add_modifier(Modifier::BOLD)),
         ])),
         rows[core_count + 2],
     );
+}
+
+// Custom text bar — uses actual terminal width, no tui Gauge quirks
+fn cpu_bar(percent: u16, bar_width: usize, label: &str, color: Color, bold: bool) -> Paragraph<'static> {
+    let pct   = percent.min(100) as usize;
+    let bar_color = if pct >= 85 { C_RED } else if pct >= 60 { C_YELLOW } else { color };
+    let filled = bar_width * pct / 100;
+    let empty  = bar_width.saturating_sub(filled);
+    let modifier = if bold { Modifier::BOLD } else { Modifier::empty() };
+
+    Paragraph::new(Spans::from(vec![
+        Span::styled(format!(" {:<6}", label), Style::default().fg(C_DIM).add_modifier(modifier)),
+        Span::styled("▐".to_string(), Style::default().fg(bar_color)),
+        Span::styled("█".repeat(filled), Style::default().fg(bar_color).add_modifier(modifier)),
+        Span::styled("░".repeat(empty),  Style::default().fg(Color::Rgb(30, 30, 50))),
+        Span::styled("▌".to_string(), Style::default().fg(bar_color)),
+        Span::styled(format!(" {:3}%", pct), Style::default().fg(C_WHITE).add_modifier(Modifier::BOLD)),
+    ]))
 }
 
 // ── Memory ────────────────────────────────────────────────────────────────────

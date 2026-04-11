@@ -1,7 +1,7 @@
 <div align="center">
   <img src="assets/logo.png" height="256" alt="ktop logo">
   
-  <h1 align="center" style="border:0;">ktop 🔥</h1>
+  <h1 align="center" style="border:0;">kctop 🔥</h1>
   
   <p align="center">A minimalist, cross-platform system monitor for your terminal.</p>
 
@@ -46,7 +46,7 @@
 ## Install
 
 ```bash
-git clone https://github.com/MahiroJV/ktop.git
+git clone https://github.com/MahiroJV/kctop.git
 cd ktop
 chmod +x install.sh
 ./install.sh
@@ -64,7 +64,7 @@ source ~/.bashrc
 Then just run:
 
 ```bash
-rtop
+kctop
 ```
 
 ## Manual build
