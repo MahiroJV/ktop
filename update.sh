@@ -82,7 +82,7 @@ success "Binary updated"
 # ── Done ──────────────────────────────────────────────────────────────────────
 echo ""
 echo "  ─────────────────────────────────────────"
-success "${BOLD}kctop updated to ${NEW_VERSION}!${RESET}"
+printf "  ${GREEN}${BOLD}✓${RESET}  kctop updated to ${NEW_VERSION}!\n"
 echo ""
 printf "  Run it with: ${CYAN}${BOLD}kctop${RESET}\n"
 echo ""
