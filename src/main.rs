@@ -2,7 +2,7 @@ mod system;
 mod ui;
 
 use std::{thread, time::Duration};
-use system::{Collector, SortBy};
+use system::{Collector};
 use ui::AppState;
 
 fn main() -> std::io::Result<()> {

@@ -506,7 +506,7 @@ fn draw_footer(f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, state: &
 
 // ── Widget helpers ────────────────────────────────────────────────────────────
 
-fn fancy_gauge(percent: u16, label: &str, color: Color) -> Gauge {
+fn fancy_gauge(percent: u16, label: &str, color: Color) -> Gauge<'_> {
     let pct = percent.min(100);
     let bar_color = if pct >= 85 { C_RED }
     else if pct >= 60 { C_YELLOW }
@@ -522,7 +522,7 @@ fn fancy_gauge(percent: u16, label: &str, color: Color) -> Gauge {
         ))
 }
 
-fn future_block(title: &str, color: Color) -> Block {
+fn future_block(title: &str, color: Color) -> Block<'_> {
     Block::default()
         .title(Spans::from(vec![
             Span::styled("╸", Style::default().fg(color)),
