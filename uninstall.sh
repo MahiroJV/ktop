@@ -59,7 +59,7 @@ fi
 echo ""
 echo "  ─────────────────────────────────────────"
 if [[ $removed -eq 1 ]]; then
-    success "${BOLD}kctop uninstalled successfully!${RESET}"
+    printf "  ${GREEN}${BOLD}✓${RESET}  kctop uninstalled successfully!\n"
 else
     warn "Nothing was removed — kctop may not have been installed."
 fi
