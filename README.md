@@ -24,27 +24,9 @@
 
 **koktail's system monitor** — a btop-inspired TUI written in Rust.
 
-```
- ktop — koktail's system monitor                        14:23:01 UTC
-┌─ CPU  12th Gen Intel Core i7 ──────────────┐┌─ Memory ────────────────────┐
-│ Total  33%  [████░░░░░░░░░░░░░░░░░░░░░░]   ││ RAM   67%  [█████████░░░░] │
-│ Core0  41%  [██████░░░░░░░░░░░░░░░░░░░░]   ││   Used: 10842 MB / 15987 MB│
-│ Core1  28%  [████░░░░░░░░░░░░░░░░░░░░░░]   ││ Swap   0%   [░░░░░░░░░░░░] │
-│ Core2  19%  [███░░░░░░░░░░░░░░░░░░░░░░░]   ││   Used: 0 MB / 8192 MB     │
-│ Freq: 2400 MHz                              │└─────────────────────────────┘
-└─────────────────────────────────────────────┘┌─ Network  [wlan0] ──────────┐
-┌─ Disk  [/dev/sda] ─────────────────────────┐│ ↓ 142 KB/s   ↑ 12 KB/s    │
-│ /     54%  [████████░░░░░░░░░░░░░░░░░░░]   ││ Total ↓ 2048 MB  ↑ 312 MB  │
-│   Used: 256.4 GB / 476.9 GB                │└─────────────────────────────┘
-└─────────────────────────────────────────────┘
-┌─ Processes ─────────────────────────────────────────────────────────────────┐
-│ PID     Name                   CPU%    MEM MB                               │
-│ 3241    rustrover              72.9%   1024                                 │
-│ 1892    firefox                14.2%   512                                  │
-│ 4102    ktop                    2.1%   8                                    │
-└─────────────────────────────────────────────────────────────────────────────┘
- q:quit
-```
+<p align="center">
+  <img src="assets/Screenshot.png" width="900" alt="ktop system monitor screenshot">
+</p>
 
 ## Features
 
@@ -82,7 +64,7 @@ source ~/.bashrc
 Then just run:
 
 ```bash
-ktop
+rtop
 ```
 
 ## Manual build
