@@ -51,6 +51,18 @@
 
 ## Install
 
+### cargo
+```bash
+cargo install kctop
+```
+
+### AUR (Arch/Manjaro)
+```bash
+yay -S kctop
+# or
+paru -S kctop
+```
+### Manual (any Linux distro)
 ```bash
 git clone https://github.com/MahiroJV/kctop.git
 cd kctop
@@ -75,11 +87,11 @@ kctop
 
 Or search **kctop** in your app launcher (GNOME, KDE, XFCE).
 
-## Manual build
-
+## Update
+ 
 ```bash
-cargo build --release
-./target/release/kctop
+chmod +x update.sh
+./update.sh
 ```
 
 ## Uninstall
