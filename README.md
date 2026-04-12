@@ -29,7 +29,7 @@
 **kctop** is a btop-inspired terminal UI system monitor built with Rust. It features a futuristic neon dashboard layout with mouse support, live sorting, and a disk directory breakdown.
 
 <p align="center">
-  <img src="assets/Screenshot.png" width="900" alt="kctop system monitor screenshot">
+  <img src="assets/SC.png" width="900" alt="kctop system monitor screenshot">
 </p>
 
 ## Features
