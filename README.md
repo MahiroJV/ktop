@@ -14,6 +14,7 @@
     <img src="https://img.shields.io/github/repo-size/MahiroJV/kctop?style=flat&color=blue" alt="size">
     <img src="https://img.shields.io/badge/Status-Active-brightgreen?style=flat" alt="Status">
     <img src="https://img.shields.io/crates/v/kctop?style=flat&color=orange" alt="crates.io">
+  <img src="https://img.shields.io/aur/version/kctop?style=flat&color=1793d1&logo=arch-linux" alt="AUR">
     <a href="https://claude.ai">
   <img src="https://img.shields.io/badge/Built%20with-Claude-CC785C?style=flat&logo=anthropic&logoColor=white" alt="Built with Claude">
 </a>
