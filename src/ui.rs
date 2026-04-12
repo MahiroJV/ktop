@@ -501,9 +501,11 @@ fn draw_disk(f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, s: &System
         rows[2],
     );
 
+    #[allow(unused_variables)]
     let max_gb = s.disk_dirs.iter().map(|d| d.size_gb as u64).max().unwrap_or(1).max(1);
 
     // unique color per dir so you can tell them apart at a glance
+    #[allow(unused_variables)]
     let dir_colors = [
         Color::Green,                   // /home
         Color::Cyan,                    // /usr

@@ -13,6 +13,7 @@
     <img src="https://img.shields.io/badge/Linux-E11837?style=flat&logo=linux&logoColor=white" alt="Linux">
     <img src="https://img.shields.io/github/repo-size/MahiroJV/kctop?style=flat&color=blue" alt="size">
     <img src="https://img.shields.io/badge/Status-Active-brightgreen?style=flat" alt="Status">
+    <img src="https://img.shields.io/crates/v/kctop?style=flat&color=orange" alt="crates.io">
     <a href="https://claude.ai">
   <img src="https://img.shields.io/badge/Built%20with-Claude-CC785C?style=flat&logo=anthropic&logoColor=white" alt="Built with Claude">
 </a>

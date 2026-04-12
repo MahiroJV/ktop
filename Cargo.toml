@@ -2,7 +2,15 @@
 name = "kctop"
 version = "0.1.0"
 edition = "2024"
-
+description = "koktail claude's top — a futuristic TUI system monitor for Linux"
+license = "MIT"
+repository = "https://github.com/MahiroJV/kctop"
+homepage = "https://github.com/MahiroJV/kctop"
+keywords = ["tui", "system-monitor", "top", "cpu", "linux"]
+categories = ["command-line-utilities"]
+readme = "README.md"
+authors = ["Mahir <MahiroJV>"]
+exclude = ["assets/Screenshot.png", ".github/"]
 
 [dependencies]
 sysinfo = "0.29"
