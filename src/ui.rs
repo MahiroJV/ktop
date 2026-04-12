@@ -501,24 +501,38 @@ fn draw_disk(f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, s: &System
         rows[2],
     );
 
+    let max_gb = s.disk_dirs.iter().map(|d| d.size_gb as u64).max().unwrap_or(1).max(1);
+
+    // unique color per dir so you can tell them apart at a glance
+    let dir_colors = [
+        Color::Green,                   // /home
+        Color::Cyan,                    // /usr
+        Color::Magenta,                 // /var
+        Color::Yellow,                  // /opt
+        Color::Blue,                    // /boot
+        Color::Red,                     // /tmp
+        Color::LightGreen,              // /srv
+        Color::LightCyan,               // /root
+    ];
     // directory rows
     for (i, dir) in s.disk_dirs.iter().take(6).enumerate() {
         let bar_w = inner.width.saturating_sub(16) as usize;
         let color = match i % 3 { 0 => C_GREEN, 1 => C_ACCENT, _ => C_PURPLE };
         let label = clip_path(&dir.path, 6);
+
         let filled = (bar_w * dir.percent as usize / 100).min(bar_w);
         let empty  = bar_w.saturating_sub(filled);
 
         f.render_widget(
             Paragraph::new(Spans::from(vec![
-                Span::styled(format!(" {:<7}", label), Style::default().fg(C_DIM)),
+                Span::styled(format!(" {:<7}", label), Style::default().fg(color).add_modifier(Modifier::BOLD)),
                 Span::styled("▐".to_string(), Style::default().fg(color)),
                 Span::styled("█".repeat(filled), Style::default().fg(color)),
-                Span::styled("░".repeat(empty),  Style::default().fg(Color::Rgb(20, 30, 20))),
+                Span::styled("░".repeat(empty),  Style::default().fg(Color::Rgb(20, 20, 20))),
                 Span::styled("▌".to_string(), Style::default().fg(color)),
                 Span::styled(
                     format!(" {:.1}G", dir.size_gb),
-                    Style::default().fg(C_WHITE),
+                    Style::default().fg(C_WHITE).add_modifier(Modifier::BOLD),
                 ),
             ])),
             rows[i + 3],
