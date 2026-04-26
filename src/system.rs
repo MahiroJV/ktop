@@ -77,7 +77,6 @@ impl Collector {
 
         // ── Memory ────────────────────────────────────────────────────────────
         // sysinfo 0.29 returns KB — convert to MB
-        const KB_TO_GB: f64 = 1024.0 * 1024.0;
         const BYTES_TO_GB: f64 = 1024.0 * 1024.0 * 1024.0;
         s.mem_total = self.sys.total_memory() as f64 / BYTES_TO_GB;
         s.mem_used = self.sys.used_memory() as f64 / BYTES_TO_GB;
@@ -188,6 +187,7 @@ fn top_dirs(_disk_total_gb: f64) -> Vec<DirInfo> {
         }
     }
     // sort biggest first
+    #[allow(clippy::unnecessary_sort_by)]
     dirs.sort_by(|a, b| b.0.cmp(&a.0));
 
     dirs.iter()
@@ -238,9 +238,13 @@ impl SystemStats {
                     .partial_cmp(&b.cpu)
                     .unwrap_or(std::cmp::Ordering::Equal)
             }),
+            #[allow(clippy::unnecessary_sort_by)]
             SortBy::MemDesc => self.processes.sort_by(|a, b| b.mem_mb.cmp(&a.mem_mb)),
+            #[allow(clippy::unnecessary_sort_by)]
             SortBy::MemAsc => self.processes.sort_by(|a, b| a.mem_mb.cmp(&b.mem_mb)),
+            #[allow(clippy::unnecessary_sort_by)]
             SortBy::Pid => self.processes.sort_by(|a, b| a.pid.cmp(&b.pid)),
+            #[allow(clippy::unnecessary_sort_by)]
             SortBy::Name => self.processes.sort_by(|a, b| a.name.cmp(&b.name)),
         }
     }

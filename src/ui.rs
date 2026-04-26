@@ -278,7 +278,7 @@ fn draw_header(f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, s: &Syst
             Span::styled("  koktail's system monitor", Style::default().fg(C_DIM)),
             Span::styled(
                 format!(
-                    "  ·  cpu {:.0}%  ·  mem {} MB  ·  {}  ",
+                    "  ·  cpu {:.0}%  ·  mem {:.2} GB  ·  {}  ",
                     s.cpu_total, s.mem_used, now
                 ),
                 Style::default().fg(C_DIM),
@@ -553,7 +553,7 @@ fn draw_processes(
                         Modifier::empty()
                     }),
                 ),
-                Cell::from(format!("{} MB", p.mem_mb)).style(base_style),
+                Cell::from(format!("{} GB", p.mem_mb)).style(base_style),
             ])
         })
         .collect();
