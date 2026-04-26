@@ -10,12 +10,12 @@ pub struct SystemStats {
     pub cpu_freq: u64,
     pub cpu_name: String,
 
-    pub mem_used: u64,
-    pub mem_total: u64,
-    pub mem_percent: u32,
-    pub swap_used: u64,
-    pub swap_total: u64,
-    pub swap_percent: u32,
+    pub mem_used: f64,
+    pub mem_total: f64,
+    pub mem_percent: f32,
+    pub swap_used: f64,
+    pub swap_total: f64,
+    pub swap_percent: f32,
 
     pub disk_name: String,
     pub disk_used_gb: f64,
@@ -77,12 +77,14 @@ impl Collector {
 
         // ── Memory ────────────────────────────────────────────────────────────
         // sysinfo 0.29 returns KB — convert to MB
-        s.mem_total = self.sys.total_memory() / 1024;
-        s.mem_used = self.sys.used_memory() / 1024;
+        const KB_TO_GB: f64 = 1024.0 * 1024.0;
+        const BYTES_TO_GB: f64 = 1024.0 * 1024.0 * 1024.0;
+        s.mem_total = self.sys.total_memory() as f64 / BYTES_TO_GB;
+        s.mem_used = self.sys.used_memory() as f64 / BYTES_TO_GB;
         s.mem_percent = pct(s.mem_used, s.mem_total);
 
-        s.swap_total = self.sys.total_swap() / 1024;
-        s.swap_used = self.sys.used_swap() / 1024;
+        s.swap_total = self.sys.total_swap() as f64 / BYTES_TO_GB;
+        s.swap_used = self.sys.used_swap() as f64 / BYTES_TO_GB;
         s.swap_percent = pct(s.swap_used, s.swap_total);
 
         // ── Disk ──────────────────────────────────────────────────────────────
@@ -202,11 +204,11 @@ fn top_dirs(_disk_total_gb: f64) -> Vec<DirInfo> {
         .collect()
 }
 
-fn pct(used: u64, total: u64) -> u32 {
-    if total == 0 {
-        0
+fn pct(used: f64, total: f64) -> f32 {
+    if total == 0.0 {
+        0.0
     } else {
-        (used * 100 / total) as u32
+        (used * 100.0 / total) as f32
     }
 }
 

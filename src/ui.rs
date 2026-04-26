@@ -187,7 +187,7 @@ pub fn draw(
     if area.width < 80 || area.height < 24 {
         let msg = Paragraph::new(Spans::from(vec![
             Span::styled(
-                " ktop-r ",
+                " kctop ",
                 Style::default().fg(C_ACCENT).add_modifier(Modifier::BOLD),
             ),
             Span::styled(
@@ -272,7 +272,7 @@ fn draw_header(f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, s: &Syst
         Paragraph::new(Spans::from(vec![
             Span::styled("  ◈ ", Style::default().fg(C_PURPLE)),
             Span::styled(
-                "ktop-r",
+                "kctop",
                 Style::default().fg(C_ACCENT).add_modifier(Modifier::BOLD),
             ),
             Span::styled("  koktail's system monitor", Style::default().fg(C_DIM)),
@@ -441,7 +441,7 @@ fn draw_memory(f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, s: &Syst
     f.render_widget(
         stat_line(
             "  ◇",
-            &format!("{} MB / {} MB", s.mem_used, s.mem_total),
+            &format!("{:.2} GB / {:.2} GB", s.mem_used, s.mem_total),
             C_PURPLE,
         ),
         rows[1],
@@ -460,7 +460,7 @@ fn draw_memory(f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, s: &Syst
     f.render_widget(
         stat_line(
             "  ◇",
-            &format!("{} MB / {} MB", s.swap_used, s.swap_total),
+            &format!("{:.2} GB / {:.2} GB", s.swap_used, s.swap_total),
             C_ACCENT,
         ),
         rows[4],
